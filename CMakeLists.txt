@@ -140,7 +140,7 @@ set(JCORE_MAIN_SRC
 	"src/J-Core/Util/StringHelpers.cpp"
 	"include/J-Core/Util/StringHelpers.h"
 	"include/J-Core/Util/PoolAllocator.h"
-	"include/J-Core/Util/AlignedAllocator.h"
+	"include/J-Core/Util/AlignmentAllocator.h"
 	"include/J-Core/Util/Stack.h"
 	
 	"src/J-Core/Util/DataFormatUtils.cpp"
