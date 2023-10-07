@@ -139,6 +139,10 @@ set(JCORE_MAIN_SRC
 	
 	"src/J-Core/Util/StringHelpers.cpp"
 	"include/J-Core/Util/StringHelpers.h"
+	
+	"src/J-Core/Util/Bitset.cpp"
+	"include/J-Core/Util/Bitset.h"
+	
 	"include/J-Core/Util/PoolAllocator.h"
 	"include/J-Core/Util/AlignmentAllocator.h"
 	"include/J-Core/Util/Stack.h"
@@ -169,6 +173,9 @@ set(JCORE_MAIN_SRC
 	
 	"include/J-Core/Math/Color565.h"
 	"src/J-Core/Math/Color565.cpp"
+	
+	"include/J-Core/Math/Color4444.h"
+	"src/J-Core/Math/Color4444.cpp"
 	
 	"include/J-Core/Math/Rect.h"
 	"include/J-Core/Math/Vertex.h"

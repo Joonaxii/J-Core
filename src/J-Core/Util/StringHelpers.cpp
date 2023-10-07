@@ -35,6 +35,28 @@ namespace JCore::Helpers {
         return true;
     }
 
+    bool strIContains(const char* strA, const char* strB) {
+        return strIContains(std::string_view(strA, strlen(strA)), std::string_view(strB, strlen(strB)));
+    }  
+    bool strIContains(const char* strA, const size_t lenA, const char* strB, const size_t lenB) {
+        return strIContains(std::string_view(strA, lenA), std::string_view(strB, lenB));
+    }
+    bool strIContains(const std::string_view& strA, const std::string_view& strB) {
+        if (strB.length() < 1) { return true; }
+
+        if (strB.length() > strA.length()) { return false; }
+        size_t inRow = 0;
+        for (size_t i = 0; i < strA.length(); i++) {
+            if (tolower(strA[i]) == tolower(strB[inRow++])) 
+            { 
+                if (inRow >= strB.length()) { return true; }
+                continue;
+            }
+            inRow = 0;
+        }
+        return false;
+    }
+
     bool strEquals(const char* strA, const size_t lenA, const char* strB, const size_t lenB) {
         return strIEquals(std::string_view(strA, lenA), std::string_view(strB, lenB));
     }
@@ -226,6 +248,13 @@ namespace JCore::Helpers {
             ind = std::min(indexOf(str, len, end[i], caseSensitive), ind);
         }
         return ind;
+    }
+
+    size_t indexOfNonNum(const char* str, size_t len) {
+        for (size_t i = 0; i < len; i++) {
+            if (str[i] < '0' || str[i] > '9') { return i; }
+        }
+        return len;
     }
 
 }

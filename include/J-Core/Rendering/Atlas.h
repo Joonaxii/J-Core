@@ -200,70 +200,54 @@ namespace JCore {
     bool packSpritesFixed(int32_t maxSize, size_t spriteCount, std::vector<AtlasDefiniton>& results) {
         AtlasDefiniton res{};
 
-        static constexpr int32_t WIDTH_PAD = (fWidth + padding);
-        static constexpr int32_t HEIGHT_PAD = (fHeight + padding);
+        static constexpr int32_t WIDTH_PAD = (fWidth + (padding * 2));
+        static constexpr int32_t HEIGHT_PAD = (fHeight + (padding * 2));
         static constexpr int32_t PAD_RESO = (WIDTH_PAD * HEIGHT_PAD);
 
-        int32_t minX = 16;
-        int32_t minY = 16;
+        int32_t divW = maxSize % WIDTH_PAD;
+        int32_t divH = maxSize % HEIGHT_PAD;
+
+        if (divW != 0) {
+            maxSize -= divW;
+        }
+        else if (divH != 0) {
+            maxSize -= divH;
+        }
 
         int32_t maxX = (maxSize / WIDTH_PAD);
         int32_t maxY = (maxSize / HEIGHT_PAD);
-
-        while (true) {
-            bool changed = false;
-            if (minX < fWidth && minX < maxSize) {
-                minX <<= 1;
-                changed = true;
-            }
-
-            if (minY < fHeight && minY < maxSize) {
-                minY <<= 1;
-                changed = true;
-            }
-            if (!changed) { break; }
-        }
-
-        res.atlas.reserve(maxX * maxY);
-        res.width = minX;
-        res.height = minX;
+        res.atlas.reserve(maxY * maxX);
 
         uint32_t indices = 0;
-        uint32_t totalLeft = spriteCount;
+        int32_t totalLeft = int32_t(spriteCount);
         while (totalLeft > 0) {
-            int32_t itemReso = PAD_RESO * (totalLeft);
+            int32_t axisReso = std::max(std::min(int32_t(ceil(sqrtf(totalLeft))), maxX), 1);
+            res.width = axisReso * WIDTH_PAD;
 
-            int32_t reso = (res.width * res.height);
-            while (reso < itemReso) {
-                if (res.width > res.height) {
-                    res.height <<= 1;
+            int32_t yRes = 1;
+            int32_t yPos = padding;
+            int32_t count = totalLeft;
+
+            JCORE_TRACE("Init: {0} | {1} | {2}", axisReso, spriteCount, count);
+            while (count > 0) {
+                int32_t minL = std::min(count, axisReso);
+                for (int32_t i = 0, x = padding; i < minL; i++, x += WIDTH_PAD) {
+                    res.atlas.emplace_back(indices++, SpriteRect(x, yPos, fWidth, fHeight));
                 }
-                else { res.width <<= 1; }
-                if (res.width > maxSize || res.height > maxSize) {
-                    res.width = uint16_t(std::min<int32_t>(res.width, maxSize));
-                    res.height = uint16_t(std::min<int32_t>(res.height, maxSize));
+
+                yRes++;
+                if (yRes >= maxY || count <= axisReso) {
+                    res.height = yRes * HEIGHT_PAD;
+                    results.push_back(res);
                     break;
                 }
-                reso = (res.width * res.height);
+
+                yPos += HEIGHT_PAD;
+                count -= minL;
             }
+            totalLeft -= int32_t(res.atlas.size());
 
-            int32_t cX = res.width / WIDTH_PAD;
-            int32_t cY = res.height / HEIGHT_PAD;
-
-            for (size_t y = 0; y < res.height; y += HEIGHT_PAD) {
-                for (size_t x = 0; x < res.width; x += WIDTH_PAD) {
-                    res.atlas.emplace_back(indices++, SpriteRect(x, y, fWidth, fHeight));
-                    if (indices >= spriteCount) { goto end; }
-                }
-            }
-
-            end:
-            results.push_back(res);
-            totalLeft -= uint32_t(res.atlas.size());
-
-            res.width = minX;
-            res.height = minY;
-
+            JCORE_TRACE("Left: {0}", totalLeft);
             res.atlas.clear();
         }
         return true;

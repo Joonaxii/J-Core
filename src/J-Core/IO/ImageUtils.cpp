@@ -12,14 +12,19 @@ namespace JCore {
     bool hasAlpha(const uint8_t* data, int32_t width, int32_t height, TextureFormat format, int32_t paletteSize) {
         int32_t reso = width * height;
         switch (format) {
-            case JCore::TextureFormat::R8:
-            case JCore::TextureFormat::RGB24:
-            case JCore::TextureFormat::Unknown: return false;
+            default: return false;
 
-            default: {
-                int32_t bpp = getBitsPerPixel(format) >> 3;
-                for (size_t i = 0, j = 3; i < reso; i++, j += bpp) {
+            case JCore::TextureFormat::RGBA32: {
+                for (size_t i = 0, j = 3; i < reso; i++, j += 4) {
                     if (data[j] < 0xFF) { return true; }
+                }
+                return false;
+            }
+
+            case JCore::TextureFormat::RGBA4444: {
+                const uint16_t* ptr = reinterpret_cast<const uint16_t*>(data);
+                for (size_t i = 0; i < reso; i++) {
+                    if ((ptr[i] & 0xF000) != 0xF000) { return true; }
                 }
                 return false;
             }
@@ -30,7 +35,6 @@ namespace JCore {
             case JCore::TextureFormat::Indexed16:
                 paletteSize = paletteSize < -1 ? 256 * 256 : paletteSize;
                 break;
-
         }
 
         bool alpha = false;
@@ -335,6 +339,22 @@ namespace JCore {
         g = RGB555LUT[(value & GREEN_MASK_555) >> 5];
         b = RGB555LUT[(value & BLUE_MASK_555) >> 10];
         a = value & ALPHA_MASK_555 ? 0xFF : 0x00;
+    }
+
+    void unpackRGB4444(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
+        static uint8_t RGB4444LUT[32]{};
+        static bool init{ false };
+
+        if (!init) {
+            for (size_t i = 0; i < 16; i++) {
+                RGB4444LUT[i] = uint8_t((i * 255) / 15);
+            }
+            init = true;
+        }
+        r = RGB4444LUT[value & 0xF];
+        g = RGB4444LUT[(value >> 4) & 0xF];
+        b = RGB4444LUT[(value >> 8) & 0xF];
+        a = RGB4444LUT[(value >> 12) & 0xF];
     }
 
     size_t calculateTextureSize(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize) {

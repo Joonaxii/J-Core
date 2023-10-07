@@ -6298,13 +6298,13 @@ bool ImGui::CollapsingHeader(const char* label, ImGuiTreeNodeFlags flags)
 }
 
 //Added this to make renaming objects easier
-bool ImGui::CollapsingHeaderNoId(const char* label, ImGuiTreeNodeFlags flags)
+bool ImGui::CollapsingHeaderNoId(const char* label, const char* idStr, ImGuiTreeNodeFlags flags)
 {
     ImGuiWindow* window = GetCurrentWindow();
     if (window->SkipItems)
         return false;
 
-    return TreeNodeBehavior(window->GetID(label), flags | ImGuiTreeNodeFlags_CollapsingHeader, label);
+    return TreeNodeBehavior(window->GetID(idStr), flags | ImGuiTreeNodeFlags_CollapsingHeader, label);
 }
 
 // p_visible == NULL                        : regular collapsing header

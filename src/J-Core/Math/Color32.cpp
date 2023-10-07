@@ -2,6 +2,7 @@
 #include <J-Core/Math/Color24.h>
 #include <J-Core/Math/Color555.h>
 #include <J-Core/Math/Color565.h>
+#include <J-Core/Math/Color4444.h>
 #include <J-Core/IO/ImageUtils.h>
 
 namespace JCore {
@@ -33,6 +34,10 @@ namespace JCore {
     Color32::Color32(const Color565& rgb, const uint8_t alpha) {
         unpackRGB565(rgb.data, r, g, b);
         a = alpha;
+    }
+
+    Color32::Color32(const Color4444& rgba) : Color32() {
+        unpackRGB4444(rgba.data, r, g, b, a);
     }
 
     Color32::operator Color24() const { return Color24(r, g, b); }

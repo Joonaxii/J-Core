@@ -81,21 +81,6 @@ namespace JCore {
     "_FragColor = color * _VertexColor;\n"
     "_FragColor.rgb *= _FragColor.a;\n"
     "}";
-    const char* INDEXED16_SHADER_FRAG =
-        "#version 330 core\n"
-        "uniform sampler2D _MainTex;\n"
-        "uniform sampler2D _MainTex_Pal;\n"
-        "in vec4 _VertexColor;\n"
-        "in vec2 _VertexUV;\n"
-        "out vec4 _FragColor;\n"
-        "void main()\n"
-        "{\n"
-        "ivec2 texSize = textureSize(_MainTex);\n"
-        "vec4 texU = texture(_MainTex, _VertexUV);\n"
-        "vec4 color = texture(_MainTex_Pal, vec2(texU.x, (texU.y * 256.0) / texSize.y));\n"
-        "_FragColor = color * _VertexColor;\n"
-        "_FragColor.rgb *= _FragColor.a;\n"
-        "}";
 
     static void calculateFramebufferRects(
         glm::i32vec2& minSrc, glm::i32vec2& sizeSrc,
@@ -138,7 +123,6 @@ namespace JCore {
         {
             default: return 0;
             case TextureFormat::Indexed8:  return 1;
-            case TextureFormat::Indexed16: return 2;
         }
     }
 
@@ -169,8 +153,7 @@ namespace JCore {
         Instance = this;
         _shaders[0].createShader(DEFAULT_SHADER_VERT, DEFAULT_SHADER_FRAG);
         _shaders[1].createShader(DEFAULT_SHADER_VERT, INDEXED_SHADER_FRAG);
-        _shaders[2].createShader(DEFAULT_SHADER_VERT, INDEXED16_SHADER_FRAG);
-
+  
         glEnable(GL_BLEND);
         glEnable(GL_SCISSOR_TEST);
 
@@ -184,7 +167,6 @@ namespace JCore {
         ImGui_ImplOpenGL3_Init();
 
         ImGui::StyleColorsDark();
-        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
 
         BufferLayout bl{};
@@ -206,7 +188,7 @@ namespace JCore {
             Instance = nullptr;
         }
 
-        for (size_t i = 0; i < 3; i++)  {
+        for (size_t i = 0; i < 2; i++)  {
             _shaders[i].release();
         }
 
@@ -293,7 +275,7 @@ namespace JCore {
                     Matrix4f proj = buffer.getProjectionMatrix();
                     cam->getViewMatrix(proj);
 
-                    for (size_t i = 0; i < 3; i++) {
+                    for (size_t i = 0; i < 2; i++) {
                         auto& shader = _shaders[i];
                         shader.bind();
                         shader.setUniformMat4f("_MVP", proj);
@@ -327,17 +309,6 @@ namespace JCore {
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             _window.resetViewport();
             clear(Color32::Black);
-
-            /*if (cam) {
-                Matrix4f matView = Matrix4f(cam->getScreenRect().min, 0, cam->getScreenRect().max);
-                _shaders[0].bind();
-                _shaders[0].setTexture("_MainTex", 0);
-
-                _window.getScreenBuffer().bindColorAttachment(0);
-                _dynamicBatch.setup(&_shaders[0]);
-                _dynamicBatch.addVerts(matView, Color32::White, QUAD, 4, QUAD_INDICES, 6);
-                _dynamicBatch.drawBatch();
-            }*/
 
             ImGui_ImplGlfw_NewFrame();
             ImGui_ImplOpenGL3_NewFrame();

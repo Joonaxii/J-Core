@@ -113,7 +113,7 @@ namespace JCore {
         setStyle(0);
     }
 
-    float calculateTaskWindowHeight(const TaskProgress& progress, float* debugProg) {
+    float calculateTaskWindowHeight(const TaskProgress& progress) {
         float h = 17;
         static constexpr float SEPARATOR_SIZE = 4;
         static constexpr float TEXT_SIZE = 34;
@@ -130,19 +130,15 @@ namespace JCore {
             }
             h += BAR_SIZE + SEPARATOR_SIZE;
         }
-
-        if (debugProg) {
-            h += ImGui::GetFrameHeight() * ((progress.flags & TaskProgress::HAS_SUB_TASK) ? 2 : 1) + SEPARATOR_SIZE;
-        }
         return h + 12;
     }
 
-    void drawTaskWindow(const TaskProgress& progress, float* debugProg) {
-        float progM = debugProg ? *debugProg : progress.getProgress();
-        float progS = debugProg ? *(debugProg + 1) : progress.subProgress;
+    void drawTaskWindow(const TaskProgress& tProg) {
+        float progM = tProg.getProgress();
+        float progS = tProg.subProgress.getNormalized();
         auto& io = ImGui::GetIO();
 
-        float height = calculateTaskWindowHeight(progress, debugProg);
+        float height = calculateTaskWindowHeight(tProg);
 
         ImGui::SetNextWindowSize({ 450, height }, 0);
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -153,70 +149,55 @@ namespace JCore {
         static const ImU32 hiLhs = ImGui::ColorConvertFloat4ToU32({ 0.55f, 0.75f, 0.95f, 0.85f });
 
         float x = ImGui::GetCursorPosX();
-        ImGui::Text("[%s]", progress.title);
+        ImGui::Text("[%s]", tProg.title);
         Gui::drawProgressSpinner("##SpinnerTask", 12, 4, col);
 
-        if (progress.message[0]) {
+        if (tProg.message[0]) {
             ImGui::SameLine();
-            ImGui::Text("%s\n(%.2f %% Done)", progress.message, progM * 100.0f);
+
+            if (tProg.progress.isRange() && (tProg.progress.type[0] & PROG_ShowRange)) {
+                if (tProg.progress.isFloat()) {
+                    ImGui::Text("%s\n(%.2f %% Done) [%zi/%zi]", tProg.message, progM * 100.0f, tProg.progress.getValueI(0), tProg.progress.getValueI(1));
+                }
+                else {
+                    ImGui::Text("%s\n(%.2f %% Done) [%.0f/%.0f]", tProg.message, progM * 100.0f, tProg.progress.getValueF(0), tProg.progress.getValueF(1));
+                }           
+            }
+            else {
+                ImGui::Text("%s\n(%.2f %% Done)", tProg.message, progM * 100.0f);
+            }
+
             ImGui::Separator();
         }
         Gui::drawProgressBar("##ProgressTask", progM, { 450, 12 }, bg, col, hiLhs);
   
-        if (progress.flags & TaskProgress::HAS_SUB_TASK) {
-            if (progress.subMessage[0]) {
+        if (tProg.flags & TaskProgress::HAS_SUB_TASK) {
+            if (tProg.subMessage[0]) {
                 ImGui::SetCursorPosX(x);
                 ImGui::Separator();
-                ImGui::Text("%s\n(%.2f %% Done)", progress.subMessage, progS * 100.0f);
+                if (tProg.subProgress.isRange() && (tProg.subProgress.type[0] & PROG_ShowRange)) {
+                    if (tProg.subProgress.isFloat()) {
+                        ImGui::Text("%s\n(%.2f %% Done) [%i/%i]", tProg.subMessage, progS * 100.0f, tProg.subProgress.getValueI(0), tProg.subProgress.getValueI(1));
+                    }
+                    else {
+                        ImGui::Text("%s\n(%.2f %% Done) [%.0f/%.0f]", tProg.subMessage, progS * 100.0f, tProg.subProgress.getValueF(0), tProg.subProgress.getValueF(1));
+                    }
+                }
+                else {
+                    ImGui::Text("%s\n(%.2f %% Done)", tProg.subMessage, progS * 100.0f);
+                }
             }
             ImGui::Separator();
             Gui::drawProgressBar("##ProgressTaskSub", progS, { 450, 12 }, bg, col, hiLhs);
         }
-
-        if (debugProg) {
-            ImGui::SliderFloat("Progress Override##MAIN", debugProg, 0, 1.0f);
-            if (progress.flags & TaskProgress::HAS_SUB_TASK) {
-                ImGui::SliderFloat("Sub-Progress Override##SUB", debugProg + 1, 0, 1.0f);
-            }
-        }
-
+        ImGui::End();
     }
 
     void Application::doGui() {
-        static bool down[2]{false};
-        static bool taskWindowOpen{ false };
-        static uint8_t flags{ 0 };
         auto& task = TaskManager::getCurrentTask();
-
-        if (GetKeyState(VK_F1) & 0x8000) {
-            if (!down[0]) {
-                taskWindowOpen = !taskWindowOpen;
-                down[0] = true;
-            }
+        if (task.isRunning()) {
+            drawTaskWindow(TaskManager::getProgress());
         }
-        else if (down[0]) { down[0] = false; }
-
-        if (GetKeyState(VK_F2) & 0x8000) {
-            if (!down[1]) {
-                if (flags & TaskProgress::HAS_SUB_TASK) {
-                    flags &= ~TaskProgress::HAS_SUB_TASK;
-                }else{
-                    flags |= TaskProgress::HAS_SUB_TASK;
-                }
-                down[1] = true;
-            }
-        }
-        else if (down[1]) { down[1] = false; }
-
-        if (task.isRunning() || taskWindowOpen) {
-            static TaskProgress progTest{"Doing Something", "Something Specific", "Even More Specific"};
-            progTest.flags = flags;
-            auto& curProg = task.isRunning() ? TaskManager::getProgress() : progTest;
-            drawTaskWindow(curProg, /*!task.isRunning() && taskWindowOpen ? &progTest.progress :*/ nullptr);
-
-            ImGui::End();
-        }
-
     }
 
     void Application::setupStyles(ImGuiStyle& defStyle) {}

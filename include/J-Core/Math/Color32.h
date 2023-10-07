@@ -1,11 +1,12 @@
 #pragma once
 #include <cstdint>
-#include <type_traits>
+#include <functional>
 
 namespace JCore {
     struct Color24;
     struct Color555;
     struct Color565;
+    struct Color4444;
     struct Color32 {
         static const Color32 White;
         static const Color32 Black;
@@ -36,6 +37,7 @@ namespace JCore {
         Color32(const Color555& rgb, const uint8_t alpha);
         Color32(const Color565& rgb);
         Color32(const Color565& rgb, const uint8_t alpha);
+        Color32(const Color4444& rgba);
 
         operator uint32_t() const { return *reinterpret_cast<const uint32_t*>(this); }
         operator Color24() const;

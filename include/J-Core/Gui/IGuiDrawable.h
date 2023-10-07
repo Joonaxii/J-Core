@@ -1,8 +1,8 @@
 #pragma once
 #include <imgui.h>
+#include <string>
 
 namespace JCore {
-
     template<typename E>
     struct IGuiMeta {
     public:
@@ -20,6 +20,20 @@ namespace JCore {
         static bool onGui(T& value, const bool doInline = false) {
             return onGui(nullptr, value, doInline);
         }
+    };
+
+    class IGuiPanel {
+    public:
+        IGuiPanel(const char* title) : _title(title) { }
+
+        const char* getTitleC_Str() const { return _title.c_str(); }
+        const std::string& getTitle() const { return _title; }
+
+        virtual void init() {};
+        virtual void draw() {};
+
+    private:
+        std::string _title;
     };
 
     namespace Gui {

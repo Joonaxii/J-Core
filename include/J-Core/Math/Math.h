@@ -53,8 +53,13 @@ namespace Math {
     }
 
     template<typename T, size_t size>
+    constexpr inline T nextDivBy(T input) {
+        return nextDivBy(input, size);
+    }
+
+    template<typename T, size_t size>
     constexpr inline T nextDivByPowOf2(T input) {
-        return (input + (size - 1)) & ~(size - 1);
+        return (input & (size - 1)) ? (input + (size - 1)) & ~(size - 1) : input;
     }
 
     template<typename T>

@@ -117,6 +117,53 @@ namespace JCore::IO {
 
         return startC != paths.size();
     }
+    struct Entry {
+        size_t index{ 0 };
+        int32_t value{ 0 };
+    };
+
+    static bool sortEntries(const Entry& a, const Entry& b) {
+        return a.value > b.value;
+    }
+
+    void sortByName(std::vector<fs::path>& paths) {
+        Entry* entries = reinterpret_cast<Entry*>(_malloca(sizeof(Entry) * paths.size()));
+        if (!entries) {
+            JCORE_ERROR("[IOUtils] Error: Failed to allocate sorting buffer!");
+            return;
+        }
+
+        for (size_t i = 0; i < paths.size(); i++) {
+            std::string name = paths[i].filename().string();
+            ConstSpan<char> spn(name.c_str(), name.length());
+            size_t ind = spn.lastIndexOf('_');
+
+            Entry& entry = entries[i];
+            entry.index = i;
+            entry.value = INT32_MIN;
+
+            int32_t vCount = 0;
+            while (ind != ConstSpan<char>::npos) {
+                auto tmp = spn.slice(ind + 1);
+                tmp = tmp.slice(0, Helpers::indexOfNonNum(tmp.get(), tmp.length()));
+
+                if (Helpers::tryParseInt(tmp, entry.value, Helpers::IBase_10)) {
+                    break;
+                }
+                spn = spn.slice(0, ind);
+                ind = spn.lastIndexOf('_');
+            }
+        }
+        std::sort(entries, entries + paths.size(), sortEntries);
+
+        for (size_t i = 0; i < paths.size(); i++) {
+            auto& entry = entries[i];
+            if (i != entry.index) {
+                std::swap(paths[i], paths[entry.index]);
+            }
+        }
+        _freea(entries);
+    }
 
     bool getAllFiles(const char* path, std::vector<fs::path>& paths, bool recursive) {
         size_t init = paths.size();
@@ -218,5 +265,14 @@ namespace JCore::IO {
 
     std::string readString(json& jsonF, const std::string& defaultValue) {
         return jsonF.is_string() ? jsonF.get<std::string>() : defaultValue;
+    }
+
+    json& getObject(const char* key, json& jsonF) {
+        auto& ret = jsonF[key];
+        
+        if (ret.is_null()) {
+            ret = json::object_t();
+        }
+        return ret;
     }
 }

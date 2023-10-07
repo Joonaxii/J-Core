@@ -8,7 +8,8 @@
 
 namespace JCore {
     enum DataFormat : uint8_t {
-        FMT_BINARY,
+        FMT_UNKNOWN = 0xFF,
+        FMT_BINARY = 0,
         FMT_TEXT,
 
         FMT_JSON, //Requires complex analysis
@@ -19,6 +20,7 @@ namespace JCore {
         //Texture formats
         FMT_PNG,
         FMT_BMP,
+        FMT_DDS,
         FMT_JPEG,
         FMT_GIF87,
         FMT_GIF89,
@@ -33,7 +35,15 @@ namespace JCore {
         FMT_TTF,
         FMT_OTF,
 
+        //J Formats
+        FMT_JTEX,
+
         _FMT_COUNT,
+    };
+
+    enum FormatNameSource {
+        FMTN_NAME = 0x0,
+        FMTN_EXTENSION = 0x1,
     };
 
     struct FormatInfo {
@@ -43,7 +53,7 @@ namespace JCore {
 
         FormatInfo() : signature{0}, mask(0), size(0) {}
         FormatInfo(const void* sig, uint64_t mask, size_t size) :
-            signature{reinterpret_cast<const char*>(sig)}, mask(mask), size(size > 64 ? 64 : 0)
+            signature{reinterpret_cast<const char*>(sig)}, mask(mask), size(size > 64 ? 64 : size)
         {
         }
 
@@ -71,15 +81,22 @@ namespace JCore {
         FMT_F_ANALYSIS_COMPLEX = 2 << FMT_F_ANALYZE_SHIFT,
     };
 
-    const FormatInfo* getDataFormats();
-    size_t getLargestFormat();
-    DataFormat getDataFormat(const Stream& stream, int64_t size = -1, DataFormatFlags flags = DataFormatFlags(0), std::function<void(void*, size_t)> dataTransform = nullptr);
+    namespace Format {
+         const FormatInfo* getFormats();
+         size_t getLargestFormat();
+
+         DataFormat getFormat(const char* path, int64_t size = -1, DataFormatFlags flags = DataFormatFlags(0), std::function<void(void*, size_t)> dataTransform = nullptr);
+         DataFormat getFormat(const Stream& stream, int64_t size = -1, DataFormatFlags flags = DataFormatFlags(0), std::function<void(void*, size_t)> dataTransform = nullptr);
+         const char* getExtension(const char* path);
+         const char* getExtension(const Stream& stream);
+         const char* getExtension(DataFormat format);
+    }
 
     template<>
-    inline constexpr int32_t JCore::EnumNames<DataFormat>::Count{ _FMT_COUNT };
+    inline constexpr int32_t JCore::EnumNames<DataFormat, FMTN_NAME>::Count{ _FMT_COUNT };
 
     template<>
-    inline const char** JCore::EnumNames<DataFormat>::getEnumNames() {
+    inline const char** JCore::EnumNames<DataFormat, FMTN_NAME>::getEnumNames() {
         static const char* names[Count] =
         {
             "Binary",
@@ -91,6 +108,7 @@ namespace JCore {
 
             "PNG",
             "BMP",
+            "DDS",
             "JPEG",
             "GIF87",
             "GIF89",
@@ -100,12 +118,13 @@ namespace JCore {
             "MP3",
             "TTF",
             "OTF",
+            "JTEX",
         };
         return names;
     }
 
     template<>
-    inline bool EnumNames<DataFormat>::noDraw(int32_t index) {
+    inline bool EnumNames<DataFormat, FMTN_NAME>::noDraw(int32_t index) {
         static bool noDraw[Count] {
             false, false, true, true, true
         };
@@ -114,4 +133,49 @@ namespace JCore {
         if (index < 0 || index >= Count || !names) { return true; }
         return noDraw[index] || isNoName(names[index]);
     }
+
+    //Extensions
+    template<>
+    inline constexpr int32_t JCore::EnumNames<DataFormat, FMTN_EXTENSION>::Count{ _FMT_COUNT };
+
+    template<>
+    inline const char** JCore::EnumNames<DataFormat, FMTN_EXTENSION>::getEnumNames() {
+        static const char* names[Count] =
+        {
+            ".bin",
+            ".txt",
+            ".json",
+            ".yaml",
+
+            "",
+
+            ".png",
+            ".bmp",
+            ".dds",
+            ".jpeg",
+            ".gif",
+            ".gif",
+            ".webp",
+            ".wav",
+            ".ogg",
+            ".mp3",
+            ".ttf",
+            ".otf",
+            ".jtex",
+        };
+        return names;
+    }
+
+    template<>
+    inline bool EnumNames<DataFormat, FMTN_EXTENSION>::noDraw(int32_t index) {
+        static bool noDraw[Count]{
+            false, false, true, true, true
+        };
+
+        auto names = getEnumNames();
+        if (index < 0 || index >= Count || !names) { return true; }
+        return noDraw[index] || isNoName(names[index]);
+    }
 }
+
+

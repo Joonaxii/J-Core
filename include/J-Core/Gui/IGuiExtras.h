@@ -6,6 +6,7 @@
 #include <misc/cpp/imgui_stdlib.h>
 #include <glm.hpp>
 #include <J-Core/Rendering/Texture.h>
+#include <J-Core/Util/StringHelpers.h>
 #include <memory>
 
 static constexpr uint32_t GUI_TEX_SPLIT_INDEXED = 0x1;
@@ -76,21 +77,59 @@ bool JCore::IGuiDrawable<glm::vec4>::onGui(const char* label, glm::vec4& object,
 }
 
 namespace JCore::Gui {
+    namespace detail {
+        template<typename U>
+        size_t indexOfName(const char* value, const U* values, size_t count) {
+            for (size_t i = 0; i < count; i++) {
+                if (values[i] == value) {
+                    return i;
+                }
+            }
+            return SIZE_MAX;
+        }
+    }
+
     bool searchDialogCenter(const char* label, uint8_t flags, char path[513], const char* types = nullptr, const size_t defaultType = 1);
     bool searchDialogLeft(const char* label, uint8_t flags, char path[513], const char* types = nullptr, const size_t defaultType = 1);
 
-    template<typename T>
-    bool drawEnumList(const char* label, T& value) {
-        int32_t valueI = int32_t(value);
+    template<typename T, size_t type = 0>
+    bool drawEnumList(const char* label, T& value, bool allowSearch = false, bool ignoreNoDraw = false) {
+        static constexpr int64_t OFFSET = (EnumNames<T, type>::Start < 0 ? -EnumNames<T, type>::Start : 0);
+        int32_t valueI = int32_t(value) + OFFSET;
         bool changed = false;
 
-        changed = EnumNames<T>::getNextValidIndex(valueI);
-        auto values = EnumNames<T>::getEnumNames();
+        changed = EnumNames<T, type>::getNextValidIndex(valueI, ignoreNoDraw);
+        auto values = EnumNames<T, type>::getEnumNames();
+
+        static char buffer[257]{ 0 };
 
         ImGui::PushID(label);
-        if (ImGui::BeginCombo(label, values[valueI])) {
-            for (int32_t i = 0; i < EnumNames<T>::Count; i++) {
-                if (EnumNames<T>::noDraw(i)) { continue; }
+
+        bool combo;
+        if (allowSearch) {
+            float avail = ImGui::GetContentRegionAvail().x;
+            float rest = avail * 0.75f;
+            float filter = avail - rest;
+
+            ImGui::PushItemWidth(filter * 0.5f);
+            ImGui::Text(label);
+            ImGui::SameLine();
+
+            ImGui::InputTextWithHint("##Filter", "Filter", buffer, 256);
+            ImGui::PopItemWidth();
+            ImGui::SameLine();
+
+            ImGui::SetNextItemWidth(rest);
+            combo = ImGui::BeginCombo("##EnumItems", values[valueI]);
+        }
+        else {
+            combo = ImGui::BeginCombo(label, values[valueI]);
+        }
+
+        if (combo) {
+ 
+            for (int32_t i = 0; i < EnumNames<T, type>::Count; i++) {
+                if (EnumNames<T, type>::noDraw(i) || (allowSearch && !Helpers::strIContains(values[i], buffer))) { continue; }
                 const bool selected = i == valueI;
 
                 ImGui::PushID(i);
@@ -102,13 +141,13 @@ namespace JCore::Gui {
                     ImGui::SetItemDefaultFocus();
                 }
                 ImGui::PopID();
-            }
-            ImGui::EndCombo();
+            }     
+            ImGui::EndCombo();  
         }
         ImGui::PopID();
 
         if (changed) {
-            value = T(valueI);
+            value = T(valueI - OFFSET);
             return true;
         }
         return false;
@@ -236,7 +275,7 @@ namespace JCore::Gui {
     void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr);
 
     template<typename T>
-    bool drawBitMask(const char* label, T& value, int32_t start, int32_t length, const char* const* names, bool allowMultiple = true) {
+    bool drawBitMask(const char* label, T& value, int32_t start, int32_t length, const char* const* names, bool allowMultiple = true, bool displayAll = true) {
         static constexpr size_t BITS = (sizeof(T) << 3);
         length = std::min<int32_t>(length, BITS - start);
         if (length <= 0) { return false; }
@@ -245,10 +284,10 @@ namespace JCore::Gui {
         bool changed = false;
         char temp[257]{ 0 };
         bool tempToggle[64]{ 0 };
-        size_t tempL = 0;
-        size_t bitsSet = 0;
+        uint64_t tempL = 0;
+        uint64_t bitsSet = 0;
         bool wasSet = false;
-        for (size_t i = 0, j = 1ULL << start; i < length; i++, j <<= 1) {
+        for (uint64_t i = 0, j = 1ULL << start; i < length; i++, j <<= 1) {
             if (tempL >= 256) { break; }
             if (bits & j) {
                 if (!wasSet) {
@@ -275,7 +314,7 @@ namespace JCore::Gui {
         if (tempL == 0) {
             sprintf_s(temp, "None");
         }
-        else if (bitsSet == length) {
+        else if (bitsSet == length && displayAll) {
             sprintf_s(temp, "Everything");
         }
 
@@ -315,8 +354,8 @@ namespace JCore::Gui {
     }
 
     template<typename T, size_t instance = 0>
-    bool drawBitMask(const char* label, T& value, bool allowMultiple = true) {
-        return drawBitMask(label, value, EnumNames<T, instance>::Start, EnumNames<T, instance>::Count, EnumNames<T, instance>::getEnumNames(), allowMultiple);
+    bool drawBitMask(const char* label, T& value, bool allowMultiple = true, bool displayAll = true) {
+        return drawBitMask(label, value, EnumNames<T, instance>::Start, EnumNames<T, instance>::Count, EnumNames<T, instance>::getEnumNames(), allowMultiple, displayAll);
     }
 
     bool drawProgressBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col, const ImU32& hi_col_lhs);
@@ -330,6 +369,26 @@ namespace JCore::Gui {
             return true;
         }
         return false;
+    }
+
+    template<typename T, typename U>
+    bool drawDropdown(const char* label, T& value, const U* names, size_t itemCount) {
+        bool changed = false;
+        size_t selectI = size_t(value);
+
+        if (ImGui::BeginCombo(label, selectI >= itemCount ? "" : names[selectI].getName())) {
+            for (size_t i = 0; i < itemCount; i++) {
+                ImGui::PushID(int32_t(i));
+                if (ImGui::Selectable(names[i].getName(), i == selectI)) {
+                    selectI = i;
+                    value = T(selectI);
+                    changed = true;
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
     }
 
     template<typename T>

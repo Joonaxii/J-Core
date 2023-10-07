@@ -15,6 +15,10 @@ namespace JCore::Helpers {
     bool strIEquals(const char* strA, const size_t lenA, const char* strB, const size_t lenB);
     bool strIEquals(const std::string_view& strA, const std::string_view& strB);
 
+    bool strIContains(const char* strA, const char* strB);
+    bool strIContains(const char* strA, const size_t lenA, const char* strB, const size_t lenB);
+    bool strIContains(const std::string_view& strA, const std::string_view& strB);
+
     bool strEquals(const char* strA, const size_t lenA, const char* strB, const size_t lenB);
     bool strEquals(const std::string_view& strA, const std::string_view& strB);
 
@@ -41,6 +45,8 @@ namespace JCore::Helpers {
 
     size_t lastIndexOf(const char* str, size_t len, const char* const* end, size_t endCount, bool caseSensitive = true);
     size_t indexOf(const char* str, size_t len, const char* const* end, size_t endCount, bool caseSensitive = true);
+
+    size_t indexOfNonNum(const char* str, size_t len);
 
     template<size_t bufSize>
     size_t lastIndexOf(const char* str, const char* (&end)[bufSize], bool caseSensitive = true) {

@@ -5,9 +5,11 @@
 #include <J-Core/Math/Color32.h>
 #include <J-Core/Math/Color555.h>
 #include <J-Core/Math/Color565.h>
+#include <J-Core/Math/Color4444.h>
 #include <J-Core/Math/Math.h>
 #include <unordered_map>
 #include <glm.hpp>
+#include <algorithm>
 
 namespace JCore {
     template<typename T>
@@ -148,6 +150,8 @@ namespace JCore {
         Indexed8,
         Indexed16,
 
+        RGBA4444,
+
         Count,
     };
 
@@ -163,6 +167,7 @@ namespace JCore {
 
             case TextureFormat::RGB48:     return 48;
             case TextureFormat::RGBA64:    return 64;
+            case TextureFormat::RGBA4444:  return 16;
         }
     }
     static constexpr int32_t getBitDepth(const TextureFormat format) {
@@ -177,6 +182,8 @@ namespace JCore {
 
             case TextureFormat::RGB48:     return 16;
             case TextureFormat::RGBA64:    return 16;
+
+            case TextureFormat::RGBA4444:  return 4;
         }
     }
     static constexpr const char* getTextureFormatName(const TextureFormat format) {
@@ -193,6 +200,8 @@ namespace JCore {
 
             case TextureFormat::RGB48:		return "RGB48";
             case TextureFormat::RGBA64:		return "RGBA64";
+
+            case TextureFormat::RGBA4444:	return "RGBA4444";
         }
     }
 
@@ -213,14 +222,36 @@ namespace JCore {
     uint8_t quantizeUI8(uint8_t value, int32_t bits);
 
     uint8_t remapUI16ToUI8(uint16_t value);
+    inline uint8_t remapUI4ToUI8(uint8_t value) {
+        static uint8_t LUT[16]{
+            0,
+            (1 * 255) / 15,
+            (2 * 255) / 15,
+            (3 * 255) / 15,
+            (4 * 255) / 15,
+            (5 * 255) / 15,
+            (6 * 255) / 15,
+            (7 * 255) / 15,
+            (8 * 255) / 15,
+            (9 * 255) / 15,
+            (10 * 255) / 15,
+            (11 * 255) / 15,
+            (12 * 255) / 15,
+            (13 * 255) / 15,
+            (14 * 255) / 15,
+            (15 * 255) / 15,
+        };
+        return LUT[value & 0xF];
+    }
     void unpackRGB565(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b);
     void unpackRGB555(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b);
     void unpackRGB555(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a);
+    void unpackRGB4444(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a);
 
     constexpr uint8_t multUI8(uint32_t a, uint32_t b) {
         return uint8_t((a * b * 0x10101U + 0x800000U) >> 24);
     }
-      
+
     inline uint8_t divUI8(int32_t a, int32_t b) {
         static bool init{ false };
         static uint8_t LUT[256 * 256]{0};
@@ -234,15 +265,136 @@ namespace JCore {
         }
         return LUT[(a & 0xFF) | ((b & 0xFF) << 8)];
     }
+    
+    inline uint8_t getLuminance(uint8_t r, uint8_t g, uint8_t b) {
+        return uint8_t(std::clamp<float>(0.2126f * float(r) + 0.7152f * float(g) + 0.0722f * float(b), 0.0f, 255.0f));
+    }
+
+    inline bool getThresholdLUM(uint8_t r, uint8_t g, uint8_t b, int32_t min, int32_t max) {
+        int32_t lum = getLuminance(r, g, b);
+        return lum > min && lum < max;
+    }
+
+
+
+    inline bool getThresholdRGB(uint8_t r, uint8_t g, uint8_t b, int32_t minR, int32_t maxR, int32_t minG, int32_t maxG, int32_t minB, int32_t maxB) {
+
+        return (r >= minR && r <= maxR) && (g >= minG && g <= maxG) && (b >= minB && b <= maxB);
+    }
 
     template<typename T, typename P = int32_t>
     inline P channelDistance(const T& a, const T& b) {
-        return (std::abs(P(a.r) - b.r) + std::abs(P(a.g) - b.g) + std::abs(P(a.b) - b.b)) / P(3);
+        return (std::abs(P(a.r) - P(b.r)) + std::abs(P(a.g) - P(b.g)) + std::abs(P(a.b) - P(b.b))) / P(3);
     }
 
-    inline uint8_t colorToAlpha(Color32 input, Color32 ref, int32_t floor, int32_t ceiling) {
-        float diff = channelDistance<Color32, float>(input, ref);
-        return uint8_t((Math::clamp(Math::inverseLerp<float>(float(floor), float(ceiling), diff), 0.0f, 1.0f)) * 255.0f);
+    template<typename T, typename P = int32_t>
+    inline P channelDistance(const T& a, P bR, P bG, P bB) {
+        return (std::abs(P(a.r) - bR) + std::abs(P(a.g) - bG) + std::abs(P(a.b) - bB)) / P(3);
+    }
+
+
+    template<typename T>
+    inline float channelDistanceSqrt(const T& a, float bR, float bG, float bB) {
+        float r = float(a.r) - bR, g = float(a.g) - bG, b = float(a.b) - bB;
+        r *= r;
+        g *= g;
+        b *= b;
+        return sqrtf((r + g + b) / 3);
+    }
+
+    inline Color32 colorToAlpha(Color32 input, Color32 ref, float floor, float ceiling) {
+
+ 
+
+        return input;
+    }
+
+    //GIMP's Color to Alpha
+    static inline void colorToAlpha(Color32& pix, float r1, float r2, float r3, float mA, float mX) { 
+        static constexpr float BYTE_TO_FLOAT = 1.0f / 255.0f;
+        float rgba[4]{ pix.r * BYTE_TO_FLOAT, pix.g * BYTE_TO_FLOAT, pix.b * BYTE_TO_FLOAT, pix.a };
+        float cOut[4]{ 0 };
+        float dist = std::max<float>(std::max<float>(std::abs(rgba[0] - r1), std::abs(rgba[1] - r2)), std::abs(rgba[2] - r3));
+
+        if (dist <= mA) {
+            pix.a = 0;
+            return;
+        }
+
+        if (dist >= mX) {
+            return;
+        }
+
+        float tDiff = mX - mA;
+        float alpha = std::clamp((dist - tDiff) / tDiff, 0.0f, 1.0f);
+
+        float oProp = (dist / mX);
+        pix.r = uint8_t(((rgba[0] - r1) / oProp + r1) * 255.0f);
+        pix.g = uint8_t(((rgba[1] - r2) / oProp + r2) * 255.0f);
+        pix.b = uint8_t(((rgba[2] - r3) / oProp + r3) * 255.0f);
+        pix.a = uint8_t(rgba[3] * alpha);
+    }
+
+    static inline void colorToAlpha(float& pA, float& p1, float& p2, float& p3, float r1, float r2, float r3, float mA = 1, float mX = 1) {
+        float aA, a1, a2, a3;
+        // a1 calculation: minimal alpha giving r1 from p1
+        if (p1 > r1) a1 = mA * (p1 - r1) / (mX - r1);
+        else if (p1 < r1) a1 = mA * (r1 - p1) / r1;
+        else a1 = 0.0f;
+        // a2 calculation: minimal alpha giving r2 from p2
+        if (p2 > r2) a2 = mA * (p2 - r2) / (mX - r2);
+        else if (p2 < r2) a2 = mA * (r2 - p2) / r2;
+        else a2 = 0.0f;
+        // a3 calculation: minimal alpha giving r3 from p3
+        if (p3 > r3) a3 = mA * (p3 - r3) / (mX - r3);
+        else if (p3 < r3) a3 = mA * (r3 - p3) / r3;
+        else a3 = 0.0f;
+        // aA calculation: max(a1, a2, a3)
+        aA = a1;
+        if (a2 > aA) aA = a2;
+        if (a3 > aA) aA = a3;
+        // apply aA to pixel:
+        if (aA >= mA / mX) {
+            pA = aA * pA / mA;
+            p1 = mA * (p1 - r1) / aA + r1;
+            p2 = mA * (p2 - r2) / aA + r2;
+            p3 = mA * (p3 - r3) / aA + r3;
+        }
+        else {
+            pA = 0;
+            p1 = 0;
+            p2 = 0;
+            p3 = 0;
+        }
+    }
+
+    inline uint8_t lerpUI8(uint8_t lhs, uint8_t rhs, uint8_t t) {
+        return std::clamp<int32_t>(int32_t(multUI8((255 - t), lhs)) + int32_t(multUI8(rhs, t)), 0, 255);
+    }
+
+    inline Color32 lerp(Color32 lhs, Color32 rhs, float t) {
+        return Color32(
+            uint8_t(Math::lerp<float>(float(lhs.r), float(rhs.r), t)),
+            uint8_t(Math::lerp<float>(float(lhs.g), float(rhs.g), t)),
+            uint8_t(Math::lerp<float>(float(lhs.b), float(rhs.b), t)),
+            uint8_t(Math::lerp<float>(float(lhs.a), float(rhs.a), t))
+        );
+    }
+
+    template<typename T>
+    inline void getCbCrY(const T& color, float& cb, float& cr, float& y) {
+        y = (color.r * 0.299f) + (color.b * 0.587f) + (color.g * 0.114f);
+        cr = 128 + (-0.168736f * color.r) + (-0.331264 * color.g) + (0.5f * color.b);
+        cb = 128 + (0.5f * color.r) + (-0.418688f * color.g) + (-0.081312f * color.b);
+    }
+
+    inline float getCbCrYDist(float cb, float cr, float cbRhs, float crRhs, float toLA, float toLB) {
+        cb = cbRhs - cb;
+        cr = crRhs - cr;
+        float ret = sqrtf((cb * cb) + (cr * cr));
+        if (ret < toLA) { return 0.0f; }
+        if (ret < toLB) { return (ret - toLA) / (toLB - toLA); }
+        return 1.0f;
     }
 
    /* inline Color32 colorToAlpha(Color32 pix, Color32 ref, uint8_t maxA = 0xFF, uint8_t maxCha = 0xFF) {
@@ -288,11 +440,20 @@ namespace JCore {
         return lhs;
     }
 
-    inline Color32& premultiply(Color32& color) {
+    inline Color32& premultiplyC32(Color32& color) {
         color.r = multUI8(color.r, color.a);
         color.g = multUI8(color.g, color.a);
         color.b = multUI8(color.b, color.a);
         return color;
+    }
+
+    inline void premultiplyC32(Color32* colors, size_t count) {
+        for (size_t i = 0; i < count; i++) {
+            auto& color = colors[i];
+            color.r = multUI8(color.r, color.a);
+            color.g = multUI8(color.g, color.a);
+            color.b = multUI8(color.b, color.a);
+        }
     }
 
     size_t calculateTextureSize(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize);
@@ -338,11 +499,55 @@ namespace JCore {
                },
                [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //Indexed16
                     memcpy(output, (dataStart + ((size_t(data[0]) | size_t(data[1]) << 8) << 2)), 4);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //RGBA4444
+                    *output = Color32(*reinterpret_cast<const Color4444*>(data));
                }
         };
 
         int32_t fmt = int32_t(format);
         if (fmt < 0 || format >= TextureFormat::Count) { output = Color32::Clear; return; }
+        converts[fmt](dataStart, data, &output);
+    }
+
+    template<>
+    inline void convertPixel<Color4444>(TextureFormat format, const uint8_t* dataStart, const uint8_t* data, Color4444& output) {
+        static PixelConvert<Color4444> converts[int32_t(TextureFormat::Count)]{
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Unknown
+                    *output = Color4444();
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //R8
+                    *output = Color4444(data[0] >> 4);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGB24
+                   *output = Color4444(data[0] >> 4, data[1] >> 4, data[2] >> 4);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGB48
+                   const uint16_t* pix = reinterpret_cast<const uint16_t*>(data);
+                    *output = Color4444(pix[0] >> 12, pix[1] >> 12, pix[2] >> 12);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA32
+                    *output = Color4444(data[0] >> 4, data[1] >> 4, data[2] >> 4, data[3] >> 4);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA64
+                   const uint16_t* pix = reinterpret_cast<const uint16_t*>(data);
+                    *output = Color4444(pix[0] >> 12, pix[1] >> 12, pix[2] >> 12, pix[3] >> 12);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Indexed8
+                    const uint8_t* pix = (dataStart + (size_t(*data) << 2));
+                    *output = Color4444(pix[0] >> 4, pix[1] >> 4, pix[2] >> 4, pix[3] >> 4);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Indexed16
+                    const uint8_t* pix = (dataStart + ((size_t(data[0]) | size_t(data[1]) << 8) << 2));
+                    *output = Color4444(pix[0] >> 4, pix[1] >> 4, pix[2] >> 4, pix[3] >> 4);
+               },
+               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA4444
+                    memcpy(output, data, 2);
+               }
+        };
+
+        int32_t fmt = int32_t(format);
+        if (fmt < 0 || format >= TextureFormat::Count) { output = Color4444(); return; }
         converts[fmt](dataStart, data, &output);
     }
 
@@ -367,6 +572,26 @@ namespace JCore {
             width(width), height(height), format(format), paletteSize(paletteSize), data(data), flags(0) {}
 
         bool isIndexed() const { return format >= TextureFormat::Indexed8 && format <= TextureFormat::Indexed16; }
+        bool hasAlpha() const {
+            switch (format) {
+                default: return false;
+
+                case TextureFormat::Indexed8:
+                case TextureFormat::Indexed16:
+                case TextureFormat::RGBA4444:
+                case TextureFormat::RGBA32:
+                case TextureFormat::RGBA64:
+                    return true;
+            }
+        }
+
+        const uint8_t* getData() const {
+            return isIndexed() ? data + (paletteSize * 4) : data;
+        }
+
+        uint8_t* getData() {
+            return isIndexed() ? data + (paletteSize * 4) : data;
+        }
 
         size_t getSize() const {
             size_t required = width * height;

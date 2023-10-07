@@ -23,6 +23,8 @@ namespace JCore {
             case TextureFormat::R8:        return isMain ? GL_R8 : GL_RED;
             case TextureFormat::Indexed8:  return isMain ? GL_R8 : GL_RED;
             case TextureFormat::Indexed16: return isMain ? GL_RG8 : GL_RG;
+
+            case TextureFormat::RGBA4444:  return isMain ? GL_RGBA4 : GL_RGBA;
         }
     }
 
@@ -32,6 +34,7 @@ namespace JCore {
             default:                       return GL_UNSIGNED_BYTE;
             case TextureFormat::RGB48:     
             case TextureFormat::RGBA64:    return GL_UNSIGNED_SHORT;
+            case TextureFormat::RGBA4444:  return GL_UNSIGNED_SHORT_4_4_4_4;
         }
     }
 
@@ -40,6 +43,7 @@ namespace JCore {
         {
             default:                        return 4;
             case TextureFormat::RGB48:
+            case TextureFormat::RGBA4444:
             case TextureFormat::Indexed16:  return 2;
 
             case TextureFormat::R8:
@@ -58,6 +62,7 @@ namespace JCore {
             case GL_R8:  return 1;
 
             case GL_RGB16:
+            case GL_RGBA4:
             case GL_RG8:  return 2;
         }
     }
@@ -109,7 +114,7 @@ namespace JCore {
         Window _window;
         bool _initialized;
 
-        Shader _shaders[3];
+        Shader _shaders[2];
 
         void clear(const Color32& color);
 

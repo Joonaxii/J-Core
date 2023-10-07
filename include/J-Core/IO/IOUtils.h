@@ -6,8 +6,6 @@
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::basic_json<nlohmann::ordered_map>;
-
-
 namespace fs = std::filesystem;
 
 namespace JCore::IO {
@@ -35,6 +33,8 @@ namespace JCore::IO {
     bool getAll(const char* path, size_t length, uint8_t flags, std::vector<FilePath>& paths, bool recursive = false);
     bool getAll(const fs::path& path, uint8_t flags, std::vector<FilePath>& paths, bool recursive = false);
 
+    void sortByName(std::vector<fs::path>& paths);
+
     bool getAllFiles(const char* path, std::vector<fs::path>& paths, bool recursive = false);
     bool getAllFilesByExt(const char* path, std::vector<fs::path>& paths, const char* ext, bool recursive = false);
     bool getAllFilesByExt(const char* path, std::vector<fs::path>& paths, const char** ext, size_t extCount = 1, bool recursive = false);
@@ -53,4 +53,6 @@ namespace JCore::IO {
 
     void writeString(json& jsonF, const std::string& value);
     std::string readString(json& jsonF, const std::string& defaultValue = "");
+
+    json& getObject(const char* key, json& jsonF);
 }

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <J-Core/Log.h>
 #include <J-Core/Math/Color24.h>
+#include <J-Core/Math/Color4444.h>
 #include <J-Core/Math/Color32.h>
 #include <J-Core/Math/Math.h>
 #include <J-Core/Util/DataUtilities.h>
@@ -16,17 +17,16 @@ namespace JCore {
         const int32_t rem = (width * bpp) & 0x3;
         return rem ? 4 - rem : 0;
     }
-
     void flipRB(uint8_t* data, const int32_t width, const int32_t bpp) {
         switch (bpp)
         {
             default: return;
             case 3:
             case 4:
-                for (size_t i = 0, j = 0; i < width; i++, j += bpp) {
+                for (size_t i = 0, j = 0, k = 2; i < width; i++, j += bpp, k += bpp) {
                     uint8_t temp = data[j];
-                    data[j] = data[j + 2];
-                    data[j + 2] = temp;
+                    data[j] = data[k];
+                    data[k] = temp;
                 }
                 break;
         }
@@ -133,7 +133,6 @@ namespace JCore {
         }
 
 
-
         bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream stream(path, "rb");
 
@@ -148,7 +147,7 @@ namespace JCore {
         bool decode(const Stream& stream, ImageData& imgData, const ImageDecodeParams params) {
             size_t start = stream.tell();
             size_t dataSize = stream.size() - start;
-     
+
             if (dataSize < 54) {
                 JCORE_ERROR("[Image-IO] (BMP) Decode Error: Not enough data to read header!");
                 return false;
@@ -176,7 +175,7 @@ namespace JCore {
                     JCORE_ERROR("[Image-IO] (BMP) Decode Error: Unsupported bitdepth ({0})!", header.bpp);
                     return false;
             }
-            if (header.compression != 0 && header.compression != 0x3) { 
+            if (header.compression != 0 && header.compression != 0x3) {
                 JCORE_ERROR("[Image-IO] (BMP) Decode Error: Unsupported compression mode ({0})!", header.compression);
                 return false;
             }
@@ -189,7 +188,7 @@ namespace JCore {
             if (header.height < 0) { header.height = -header.height; }
 
             const uint32_t reso = header.width * header.height;
-       
+
             const int32_t padding = calcualtePadding(header.width, bytesPerPixel);
 
             const uint32_t rawScanSize = (header.width * bytesPerPixel);
@@ -214,7 +213,7 @@ namespace JCore {
 
             imgData.width = header.width;
             imgData.height = header.height;
-        
+
             //Take note of position before any potential extra data used for 
             //bit depts other than 24 bits.
             size_t pos = stream.tell();
@@ -259,15 +258,15 @@ namespace JCore {
                     uint32_t maskBuffer[4]{ 0 };
 
                     if (stream.tell() == header.dataOffset) {
-                        maskBuffer[0] = 0x000000FFU;
+                        maskBuffer[0] = 0x00FF0000U;
                         maskBuffer[1] = 0x0000FF00U;
-                        maskBuffer[2] = 0x00FF0000U;
+                        maskBuffer[2] = 0x000000FFU;
                         maskBuffer[3] = 0xFF000000U;
                     }
                     else {
                         stream.read(reinterpret_cast<char*>(maskBuffer), 16, false);
                     }
-                    
+
                     const int32_t maskOffsets[4]{
                         Math::findFirstLSB(maskBuffer[0]),
                         Math::findFirstLSB(maskBuffer[1]),
@@ -294,18 +293,16 @@ namespace JCore {
             return true;
         }
 
-
-
-        bool encode(const char* path, const ImageData& imgData) {
+        bool encode(const char* path, const ImageData& imgData, uint32_t dpi) {
             FileStream fs(path);
             if (fs.open("wb")) {
-                return encode(fs, imgData);
+                return encode(fs, imgData, dpi);
             }
             JCORE_ERROR("[Image-IO] (BMP) Encode Error: Failed to open file '{0}' for writing!", path);
             return false;
         }
 
-        bool encode(const Stream& stream, const ImageData& imgData) {
+        bool encode(const Stream& stream, const ImageData& imgData, uint32_t dpi) {
 
             if (!stream.isOpen()) {
                 JCORE_ERROR("[Image-IO] (BMP) Encode Error: Stream isn't open!");
@@ -341,9 +338,9 @@ namespace JCore {
             int32_t total = (dataOffset + (scanSP * imgData.height));
 
             uint8_t* scan = reinterpret_cast<uint8_t*>(_malloca(scanSP));
-            if (!scan) { 
+            if (!scan) {
                 JCORE_ERROR("[Image-IO] (BMP) Encode Error: Failed to allocate scanline buffer of size {0} bytes!", scanSP);
-                return false; 
+                return false;
             }
             memset(scan, 0, scanSP);
 
@@ -374,7 +371,7 @@ namespace JCore {
                     break;
             }
 
-            stream.writeValue<uint32_t>(2835, 2);
+            stream.writeValue<uint32_t>(uint32_t(std::round(dpi * 39.3701f)), 2);
 
             if (imgData.format == TextureFormat::Indexed8) {
                 stream.writeValue<int32_t>(256);
@@ -403,7 +400,7 @@ namespace JCore {
                     }
                     stream.write(palette, sizeof(palette));
                 }
-                    break;
+                                            break;
             }
 
             for (size_t y = 0, yP = size_t(imgData.height) * scanSR - size_t(scanSR); y < imgData.height; y++, yP -= scanSR) {
@@ -426,10 +423,10 @@ namespace JCore {
 
 #pragma pack(push, 1)
         struct PngChunk {
-            uint32_t length{0};
+            uint32_t length{ 0 };
             PngChunkType type{};
-            size_t position{0};
-            uint32_t crc{0};
+            size_t position{ 0 };
+            uint32_t crc{ 0 };
 
             PngChunk() : length(), type(), position(), crc() {}
             PngChunk(const uint32_t length, const PngChunkType type) : length(length), type(type), position(), crc() {}
@@ -559,7 +556,7 @@ namespace JCore {
 
         bool decode(const Stream& stream, ImageData& imgData, const ImageDecodeParams params) {
             static uint8_t PNG_HEADER[]{ 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, };
-            uint8_t buffer[32]{0};
+            uint8_t buffer[32]{ 0 };
 
             stream.read(buffer, 8, false);
             if (std::memcmp(PNG_HEADER, buffer, 8)) {
@@ -597,10 +594,10 @@ namespace JCore {
                         Data::reverseEndianess(&ihdr, sizeof(uint32_t), 2);
                         stream.seek(4, SEEK_CUR);
 
-                      /*  if (ihdr.interlaced) {
-                            JCORE_ERROR("[Image-IO] (PNG) Decode Error: Interlaced PNGs are note supported!");
-                            return false;
-                        }*/
+                        /*  if (ihdr.interlaced) {
+                              JCORE_ERROR("[Image-IO] (PNG) Decode Error: Interlaced PNGs are note supported!");
+                              return false;
+                          }*/
 
                         switch (ihdr.bitDepth)
                         {
@@ -635,7 +632,7 @@ namespace JCore {
                                 break;
                         }
 
-                        imgData.width  = std::abs(ihdr.width);
+                        imgData.width = std::abs(ihdr.width);
                         imgData.height = std::abs(ihdr.height);
                         break;
 
@@ -650,13 +647,13 @@ namespace JCore {
                         goto end;
                 }
             }
-            end:
+        end:
 
             uint8_t bpp = getBitsPerPixel(imgData.format) >> 3;
             uint32_t scanSR = imgData.width * bpp;
             uint32_t scanSP = scanSR + 1;
 
-            uint32_t paletteSize = imgData.format == TextureFormat::Indexed8 ? 256 * 4 : (params.flags & F_IMG_BUILD_PALETTE) ? 256*256*4 : 0;
+            uint32_t paletteSize = imgData.format == TextureFormat::Indexed8 ? 256 * 4 : (params.flags & F_IMG_BUILD_PALETTE) ? 256 * 256 * 4 : 0;
             uint32_t totalSize = scanSR * imgData.height + paletteSize;
             uint32_t rawSize = scanSP * imgData.height;
 
@@ -694,7 +691,7 @@ namespace JCore {
             if (ret == -1) {
                 JCORE_ERROR("[Image-IO] (PNG) Decode Error: ZLib Inflate failed!");
                 _freea(rawBuffer);
-                
+
                 free(imgData.data);
                 imgData.data = nullptr;
                 return false;
@@ -728,7 +725,7 @@ namespace JCore {
                 if (alphaChnk.type == CH_tRNS) {
                     stream.seek(alphaChnk.position, SEEK_SET);
 
-                    uint8_t alpha[256]{0};
+                    uint8_t alpha[256]{ 0 };
                     stream.read(alpha, alphaChnk.length, false);
 
                     for (size_t i = 0, j = 3; i < alphaChnk.length; i++, j += 4) {
@@ -737,7 +734,7 @@ namespace JCore {
                 }
             }
 
-            Span<uint8_t> prior  (scanBuffer,          scanSP);
+            Span<uint8_t> prior(scanBuffer, scanSP);
             Span<uint8_t> current(scanBuffer + scanSP, scanSP);
 
             Span<uint8_t> priorPix = prior.slice(1);
@@ -773,7 +770,7 @@ namespace JCore {
                 JCORE_TRACE("[Image-IO] (PNG) Decode: Building palette with {0} colors!", colorCount);
                 totalSize = colorCount * 4 + (imgData.width * imgData.height * 2);
                 uint8_t* temp = reinterpret_cast<uint8_t*>(malloc(totalSize));
-          
+
                 if (!temp) {
                     JCORE_ERROR("[Image-IO] (PNG) Decode Error: Failed to allocate Indexed pixel buffer! ({0} bytes)", totalSize);
                     return false;
@@ -824,7 +821,7 @@ namespace JCore {
             JCORE_ERROR("[Image-IO] (PNG) Decode Error: Couldn't find IHDR!");
             return false;
 
-            foundHeader:
+        foundHeader:
             switch (ihdr.bitDepth)
             {
                 default:
@@ -873,7 +870,7 @@ namespace JCore {
             stream.writeValue(crc, 1, true);
         }
 
-        bool encode(const char* path, const ImageData& imgData, const uint32_t compression)  {
+        bool encode(const char* path, const ImageData& imgData, const uint32_t compression) {
             FileStream fs(path);
             if (fs.open("wb")) {
                 return encode(fs, imgData, compression);
@@ -938,12 +935,12 @@ namespace JCore {
                     goto rgbSet;
                     break;
                 case TextureFormat::RGB24:
-                    rgbSet:
+                rgbSet:
                     bufSpan.writeAt<uint8_t>(8, 8);
                     bufSpan.writeAt<uint8_t>(9, 2);
-                    break;                      
+                    break;
                 case TextureFormat::RGBA32:
-                    rgbaSet:
+                rgbaSet:
                     bufSpan.writeAt<uint8_t>(8, 8);
                     bufSpan.writeAt<uint8_t>(9, 6);
                     break;
@@ -1077,8 +1074,6 @@ namespace JCore {
         }
     }
 
-
-
     namespace DXT {
         uint32_t packRGBA(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
             return ((r << 0) | (g << 8) | (b << 16) | (a << 24));
@@ -1124,7 +1119,7 @@ namespace JCore {
                                 finalColor = Color24(uint8_t(r1), uint8_t(g1), uint8_t(b1));
                                 break;
                             case 2:
-                                finalColor = Color24(uint8_t((2 * r0 + r1) / 3), uint8_t((2 * g0 + g1) / 3),uint8_t( (2 * b0 + b1) / 3));
+                                finalColor = Color24(uint8_t((2 * r0 + r1) / 3), uint8_t((2 * g0 + g1) / 3), uint8_t((2 * b0 + b1) / 3));
                                 break;
                             case 3:
                                 finalColor = Color24(uint8_t((r0 + 2 * r1) / 3), uint8_t((g0 + 2 * g1) / 3), uint8_t((b0 + 2 * b1) / 3));
@@ -1181,7 +1176,7 @@ namespace JCore {
                 for (uint32_t j = 0; j < blockCountY; j++)
                 {
                     stream.read(blockStorage, 1, bufSize, false);
-                    for (uint32_t i = 0, k = 0; i < blockCountX; i++, k+=8) {
+                    for (uint32_t i = 0, k = 0; i < blockCountX; i++, k += 8) {
                         decompressDXT1Block(i * 4, j * 4, img.width, img.height, blockStorage + k, pixels);
                     }
                 }
@@ -1317,7 +1312,7 @@ namespace JCore {
                 for (uint32_t j = 0; j < blockCountY; j++)
                 {
                     stream.read(blockStorage, 1, bufSize, false);
-                    for (uint32_t i = 0, k = 0; i < blockCountX; i++, k+=16) {
+                    for (uint32_t i = 0, k = 0; i < blockCountX; i++, k += 16) {
                         decompressDXT5Block(i * 4, j * 4, img.width, img.height, blockStorage + k, pixels);
                     }
                 }
@@ -1331,5 +1326,575 @@ namespace JCore {
 
     }
 
+    namespace DDS {
+
+        enum DDSCompression : uint32_t {
+            DDS_None = 0x00,
+
+            DDS_DXT1 = 0x31585444U,
+            DDS_DXT2 = 0x32585444U,
+            DDS_DXT3 = 0x33585444U,
+            DDS_DXT4 = 0x34585444U,
+            DDS_DXT5 = 0x35585444U,
+        };
+
+#pragma pack(push, 1)
+        struct DDSFormat {
+            uint32_t flags{};
+            DDSCompression compression{};
+            uint32_t bitCount{};
+            uint32_t compMasks[4]{};
+        };
+#pragma pack(pop, 1)
+
+        bool getInfo(const char* path, ImageData& imgData) {
+            FileStream stream(path, "rb");
+
+            if (stream.isOpen()) {
+                return getInfo(stream, imgData);
+            }
+
+            JCORE_ERROR("[Image-IO] (DDS) Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool getInfo(const Stream& stream, ImageData& imgData) {
+            if (!stream.isOpen()) {
+                JCORE_ERROR("[Image-IO] (DDS) Decode Error: Stream isn't open!");
+                return false;
+            }
+
+            static constexpr uint32_t SIGNATURE = 0x20534444;
+            uint32_t sig{};
+            stream.readValue(sig, false);
+
+            if (sig != SIGNATURE) {
+                JCORE_ERROR("[Image-IO] (DDS) Error: Signature isn't valid!");
+                return false;
+            }
+
+
+            size_t dataStart = 0;
+            stream.read(&dataStart, 4, 1, false);
+            dataStart += (stream.tell() - 4);
+            uint32_t flags = 0;
+            uint32_t pitch = 0, scanSize = 0;
+
+            stream.readValue(flags, false);
+            stream.readValue(imgData.height, false);
+            stream.readValue(imgData.width, false);
+            stream.readValue(pitch, false);
+            stream.seek(56, SEEK_CUR);
+
+            DDSFormat fmt{};
+            stream.readValue(fmt, false);
+
+            switch (fmt.compression)
+            {
+                default:
+                    JCORE_ERROR("[Image-IO] (DDS) Error: Unsupported compression format!");
+                    return false;
+                case DDS_None:
+                    break;
+            }
+
+            switch (fmt.bitCount)
+            {
+                default:
+                    JCORE_ERROR("[Image-IO] (DDS) Error: Unsupported bit count!");
+                    return false;
+                case 16:
+                    //TODO: Add additional checks for Color565 and Color555
+                    //for now we just assume Color4444
+                    imgData.format = TextureFormat::RGBA4444;
+                    break;
+                case 24:
+                    imgData.format = TextureFormat::RGB24;
+                    break;
+                case 32:
+                    imgData.format = TextureFormat::RGBA32;
+                    break;
+            }
+            return true;
+        }
+
+        bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+            FileStream stream(path, "rb");
+
+            if (stream.isOpen()) {
+                return decode(stream, imgData, params);
+            }
+
+            JCORE_ERROR("[Image-IO] (DDS) Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool decode(const Stream& stream, ImageData& imgData, const ImageDecodeParams params) {
+            if (!stream.isOpen()) {
+                JCORE_ERROR("[Image-IO] (DDS) Decode Error: Stream isn't open!");
+                return false;
+            }
+
+            static constexpr uint32_t SIGNATURE = 0x20534444;
+            uint32_t sig{};
+            stream.readValue(sig, false);
+
+            if (sig != SIGNATURE) {
+                JCORE_ERROR("[Image-IO] (DDS) Error: Signature isn't valid!");
+                return false;
+            }
+
+            size_t dataStart = 0;
+            stream.read(&dataStart, 4, 1, false);
+            dataStart += (stream.tell() - 4);
+            uint32_t flags = 0;
+            uint32_t pitch = 0, scanSize = 0;
+
+            stream.readValue(flags, false);
+            stream.readValue(imgData.height, false);
+            stream.readValue(imgData.width, false);
+            stream.readValue(pitch, false);
+            stream.seek(56, SEEK_CUR);
+
+            DDSFormat fmt{};
+            stream.readValue(fmt, false);
+
+            switch (fmt.compression)
+            {
+                default:
+                    JCORE_ERROR("[Image-IO] (DDS) Error: Unsupported compression format!");
+                    return false;
+                case 0:
+                    break;
+            }
+
+            switch (fmt.bitCount)
+            {
+                default:
+                    JCORE_ERROR("[Image-IO] (DDS) Error: Unsupported bit count!");
+                    return false;
+                case 16:
+                    //TODO: Add additional checks for Color565 and Color555
+                    //for now we just assume Color4444
+                    imgData.format = TextureFormat::RGBA4444;
+                    pitch = (imgData.width * 16 + 7) / 8;
+                    scanSize = imgData.width << 1;
+                    break;
+                case 24:
+                    imgData.format = TextureFormat::RGB24;
+                    pitch = (imgData.width * 24 + 7) / 8;
+                    scanSize = imgData.width * 3;
+                    break;
+                case 32:
+                    imgData.format = TextureFormat::RGBA32;
+                    pitch = imgData.width << 2;
+                    scanSize = pitch;
+                    break;
+            }
+
+            if (!imgData.doAllocate()) {
+                JCORE_ERROR("[Image-IO] (DDS) Error: Failed to allocate image data!");
+                return false;
+            }
+
+            uint8_t* scan = reinterpret_cast<uint8_t*>(_malloca(pitch));
+            if (!scan) {
+                JCORE_ERROR("[Image-IO] (DDS) Error: Failed to allocate scan buffer!");
+                return false;
+            }
+
+            stream.seek(dataStart, SEEK_SET);
+            const int32_t maskOffsets[4]{
+                   Math::findFirstLSB(fmt.compMasks[0]),
+                   Math::findFirstLSB(fmt.compMasks[1]),
+                   Math::findFirstLSB(fmt.compMasks[2]),
+                   Math::findFirstLSB(fmt.compMasks[3]),
+            };
+
+            for (int32_t y = 0, yP = 0; y < imgData.height; y++, yP += scanSize) {
+                stream.read(scan, pitch, false);
+                memcpy(imgData.data + yP, scan, scanSize);
+            }
+
+            int32_t reso = imgData.width * imgData.height;
+            //Apply color masks
+            switch (imgData.format)
+            {
+                case TextureFormat::RGBA32: {
+                    Color32* cPtr = reinterpret_cast<Color32*>(imgData.data);
+                    for (size_t i = 0, j = 0; i < reso; i++, j++) {
+                        auto& color = cPtr[i];
+                        const uint32_t data = uint32_t(color);
+
+                        color.r = (data & fmt.compMasks[0]) >> maskOffsets[0];
+                        color.g = (data & fmt.compMasks[1]) >> maskOffsets[1];
+                        color.b = (data & fmt.compMasks[2]) >> maskOffsets[2];
+                        color.a = (data & fmt.compMasks[3]) >> maskOffsets[3];
+                    }
+                    break;
+                }
+
+                case TextureFormat::RGB24: {
+                    Color24* cPtr = reinterpret_cast<Color24*>(imgData.data);
+                    for (size_t i = 0, j = 0; i < reso; i++, j++) {
+                        auto& color = cPtr[i];
+                        const uint32_t data = uint32_t(color);
+
+                        color.r = (data & fmt.compMasks[0]) >> maskOffsets[0];
+                        color.g = (data & fmt.compMasks[1]) >> maskOffsets[1];
+                        color.b = (data & fmt.compMasks[2]) >> maskOffsets[2];
+                    }
+                    break;
+                }
+
+                case TextureFormat::RGBA4444: {
+                    Color4444* cPtr = reinterpret_cast<Color4444*>(imgData.data);
+                    for (size_t i = 0, j = 0; i < reso; i++, j++) {
+                        auto& color = cPtr[i];
+                        const uint32_t data = color.data;
+                        color = Color4444(
+                            uint16_t((data & fmt.compMasks[0]) >> maskOffsets[0]),
+                            uint16_t((data & fmt.compMasks[1]) >> maskOffsets[1]),
+                            uint16_t((data & fmt.compMasks[2]) >> maskOffsets[2]),
+                            uint16_t((data & fmt.compMasks[3]) >> maskOffsets[3])
+                        );
+                    }
+                    break;
+                }
+            }
+
+            _freea(scan);
+            return true;
+        }
+
+        bool encode(const char* path, const ImageData& imgData) {
+            FileStream fs(path);
+            if (fs.open("wb")) {
+                return encode(fs, imgData);
+            }
+            JCORE_ERROR("[Image-IO] (DDS) Encode Error: Failed to open file '{0}' for writing!", path);
+            return false;
+        }
+
+        bool encode(const Stream& stream, const ImageData& imgData) {
+            if (!stream.isOpen()) {
+                JCORE_ERROR("[Image-IO] (DDS) Encode Error: Stream isn't open!");
+                return false;
+            }
+
+            switch (imgData.format) {
+                default:
+                    JCORE_ERROR("[Image-IO] (DDS) Encode Error: Format '{0}' isn't supported!", getTextureFormatName(imgData.format));
+                    return false;
+                case TextureFormat::R8:
+                case TextureFormat::RGB24:
+                case TextureFormat::RGBA32:
+                case TextureFormat::Indexed8:
+                case TextureFormat::Indexed16:
+                case TextureFormat::RGBA4444:
+                    break;
+            }
+
+            DDSFormat fmt{};
+
+            fmt.compression = DDSCompression::DDS_None;
+            switch (imgData.format)
+            {
+                case TextureFormat::R8:
+                case TextureFormat::RGB24:
+                    fmt.compMasks[0] = 0x000000FFU;
+                    fmt.compMasks[1] = 0x0000FF00U;
+                    fmt.compMasks[2] = 0x00FF000U;
+                    fmt.compMasks[3] = 0x0000000U;
+                    fmt.bitCount = 24;
+                    fmt.flags = 0x40;
+                    break;
+                case TextureFormat::RGBA32:
+                case TextureFormat::Indexed8:
+                case TextureFormat::Indexed16:
+                    fmt.compMasks[0] = 0x000000FFU;
+                    fmt.compMasks[1] = 0x0000FF00U;
+                    fmt.compMasks[2] = 0x00FF000U;
+                    fmt.compMasks[3] = 0xFF00000U;
+                    fmt.bitCount = 32;
+                    fmt.flags = 0x40 | 0x1;
+                    break;
+                case TextureFormat::RGBA4444:
+                    fmt.compMasks[0] = 0x0000000FU;
+                    fmt.compMasks[1] = 0x000000F0U;
+                    fmt.compMasks[2] = 0x00000F00U;
+                    fmt.compMasks[3] = 0x0000F000U;
+                    fmt.bitCount = 16;
+                    fmt.flags = 0x40 | 0x1;
+                    break;
+            }
+
+            uint32_t pitch = (imgData.width * fmt.bitCount + 7) / 8;
+
+            uint8_t* scan = reinterpret_cast<uint8_t*>(_malloca(pitch));
+            if (!scan) {
+                JCORE_ERROR("[Image-IO] (DDS) Error: Failed to allocate scan buffer!");
+                return false;
+            }
+            memset(scan, 0, pitch);
+
+            static constexpr uint32_t SIGNATURE = 0x20534444;
+            static constexpr uint32_t FLAGS = 0x1 | 0x2 | 0x4 | 0x8 | 0x1000;
+            stream.writeValue(SIGNATURE);
+            stream.writeValue(124U);
+            stream.writeValue(FLAGS);
+            stream.writeValue(imgData.height);
+            stream.writeValue(imgData.width);
+            stream.writeValue(pitch);
+            stream.writeValue<uint8_t>(0, 52);
+
+            stream.writeValue(32);
+            stream.writeValue(fmt);
+
+            stream.writeValue(0x1000U);
+            stream.writeValue(0x0000U, 4);
+
+            switch (imgData.format)
+            {
+                case TextureFormat::R8: {
+                    size_t scanS = size_t(imgData.width) * 3;
+                    for (size_t y = 0, yP = 0; y < imgData.height; y++, yP += imgData.width) {
+                        memset(scan, imgData.data[yP], scanS);
+                        stream.write(scan, pitch);
+                    }
+                    break;
+                }
+                case TextureFormat::RGB24:
+                case TextureFormat::RGBA4444:
+                case TextureFormat::RGBA32: {
+                    size_t scanS = size_t(getBitsPerPixel(imgData.format) >> 3) * imgData.width;
+                    for (size_t y = 0, yP = 0; y < imgData.height; y++, yP += scanS) {
+                        memcpy(scan, imgData.data + yP, scanS);
+                        stream.write(scan, pitch);
+                    }
+                    break;
+                }
+                case TextureFormat::Indexed8: {
+                    const Color32* palette = reinterpret_cast<const Color32*>(imgData.data);
+                    const uint8_t* pixels = imgData.data + 1024;
+                    for (size_t y = 0, yP = 0; y < imgData.height; y++, yP += imgData.width) {
+                        for (size_t x = 0, xP = 0; x < imgData.width; x++, xP += 4) {
+                            memcpy(scan + xP, palette + pixels[yP + x], 4);
+                        }
+                        stream.write(scan, pitch);
+                    }
+                    break;
+                }
+                case TextureFormat::Indexed16: {
+                    const Color32* palette = reinterpret_cast<const Color32*>(imgData.data);
+                    const uint16_t* pixels = reinterpret_cast<const uint16_t*>(imgData.data + (imgData.paletteSize * sizeof(Color32)));
+                    for (size_t y = 0, yP = 0; y < imgData.height; y++, yP += imgData.width) {
+                        for (size_t x = 0, xP = 0; x < imgData.width; x++, xP += 4) {
+                            memcpy(scan + xP, palette + pixels[yP + x], 4);
+                        }
+                        stream.write(scan, pitch);
+                    }
+                    break;
+                }
+            }
+            return true;
+        }
+    }
+
+    namespace JTEX {
+        static constexpr uint32_t JTEX_SIG = 0x5845544AU;
+        enum JTEXFlags : uint32_t {
+            JTEX_None,
+            JTEX_Compressed = 0x1,
+        };
+
+        bool getInfo(const char* path, ImageData& imgData) {
+            FileStream stream(path, "rb");
+
+            if (stream.isOpen()) {
+                return getInfo(stream, imgData);
+            }
+
+            JCORE_ERROR("[Image-IO] (JTEX) Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool getInfo(const Stream& stream, ImageData& imgData) {
+            if (!stream.isOpen()) {
+                JCORE_ERROR("[Image-IO] (JTEX) Decode Error: Stream isn't open!");
+                return false;
+            }
+
+#pragma pack(push, 1)
+            struct Header {
+                uint32_t sig;
+                JTEXFlags flags;
+                int32_t width;
+                int32_t height;
+                TextureFormat format;
+                int32_t paletteSize;
+                uint8_t imgFlags;
+            };
+#pragma pack(pop, 1)
+
+            Header hdr{};
+            stream.readValue(hdr, false);
+
+            if (hdr.sig != JTEX_SIG) {
+                JCORE_ERROR("[Image-IO] (JTEX) Decode Error: Signature isn't valid!");
+                return false;
+            }
+
+            imgData.width = hdr.width;
+            imgData.height = hdr.height;
+            imgData.format = hdr.format;
+            imgData.paletteSize = hdr.paletteSize;
+            imgData.flags = hdr.imgFlags;
+            return true;
+        }
+
+        bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+            FileStream stream(path, "rb");
+
+            if (stream.isOpen()) {
+                return decode(stream, imgData, params);
+            }
+
+            JCORE_ERROR("[Image-IO] (JTEX) Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool decode(const Stream& stream, ImageData& imgData, const ImageDecodeParams params) {
+            if (!getInfo(stream, imgData)) {
+                return false;
+            }
+
+            if (!imgData.doAllocate()) {
+                JCORE_ERROR("[Image-IO] (JTEX) Decode Error: Failed to allocate pixel buffer!");
+                return false;
+            }
+            stream.read(imgData.data, imgData.getSize(), false);
+            return true;
+        }
+
+        bool encode(const char* path, const ImageData& imgData) {
+            FileStream fs(path);
+            if (fs.open("wb")) {
+                return encode(fs, imgData);
+            }
+            JCORE_ERROR("[Image-IO] (JTEX) Encode Error: Failed to open file '{0}' for writing!", path);
+            return false;
+        }
+
+        bool encode(const Stream& stream, const ImageData& imgData) {
+            if (!stream.isOpen()) {
+                JCORE_ERROR("[Image-IO] (JTEX) Encode Error: Stream isn't open!");
+                return false;
+            }
+
+            stream.writeValue(JTEX_SIG);
+            stream.writeValue(0U);
+            stream.writeValue(imgData.width);
+            stream.writeValue(imgData.height);
+            stream.writeValue(imgData.format);
+            stream.writeValue(imgData.paletteSize);
+            stream.writeValue(imgData.flags);
+            stream.write(imgData.data, imgData.getSize(), false);
+            return true;
+        }
+    }
+
+    namespace Image {
+        bool tryGetInfo(const char* path, ImageData& imgData, DataFormat& format) {
+            FileStream stream(path, "rb");
+
+            if (stream.isOpen()) {
+                return tryGetInfo(stream, imgData, format);
+            }
+
+            JCORE_ERROR("[Image-IO] Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool tryGetInfo(const Stream& stream, ImageData& imgData, DataFormat& format) {
+            size_t pos = stream.tell();
+            format = Format::getFormat(stream);
+            stream.seek(pos, SEEK_SET);
+
+            switch (format) {
+                default:
+                    JCORE_WARN("[Image-IO] Warning: Unsupported image format '{0}'!", EnumNames<DataFormat>::getEnumName(format));
+                    return false;
+                case DataFormat::FMT_PNG:
+                    return Png::getInfo(stream, imgData);
+                case DataFormat::FMT_BMP:
+                    return Bmp::getInfo(stream, imgData);
+                case DataFormat::FMT_DDS:
+                    return DDS::getInfo(stream, imgData);
+                case DataFormat::FMT_JTEX:
+                    return JTEX::getInfo(stream, imgData);
+            }
+        }
+
+        bool tryDecode(const char* path, ImageData& imgData, DataFormat& format, const ImageDecodeParams params) {
+            FileStream stream(path, "rb");
+
+            if (stream.isOpen()) {
+                return tryDecode(stream, imgData, format, params);
+            }
+
+            JCORE_ERROR("[Image-IO] Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool tryDecode(const Stream& stream, ImageData& imgData, DataFormat& format, const ImageDecodeParams params) {
+            if (!stream.isOpen()) { format = DataFormat::FMT_UNKNOWN; return false; }
+            if (format == DataFormat::FMT_UNKNOWN) {
+                size_t pos = stream.tell();
+                format = Format::getFormat(stream);
+                stream.seek(pos, SEEK_SET);
+            }
+            switch (format)
+            {
+                default:
+                    JCORE_WARN("[Image-IO] Warning: Unsupported image format '{0}'!", EnumNames<DataFormat>::getEnumName(format));
+                    return false;
+                case DataFormat::FMT_PNG:
+                    return Png::decode(stream, imgData, params);
+                case DataFormat::FMT_BMP:
+                    return Bmp::decode(stream, imgData, params);
+                case DataFormat::FMT_DDS:
+                    return DDS::decode(stream, imgData, params);
+                case DataFormat::FMT_JTEX:
+                    return JTEX::decode(stream, imgData, params);
+            }
+        }
+
+        bool tryEncode(const char* path, const ImageData& imgData, DataFormat format, const ImageEncodeParams& encodeParams) {
+            FileStream fs(path);
+            if (fs.open("wb")) {
+                return tryEncode(fs, imgData, format, encodeParams);
+            }
+            JCORE_ERROR("[Image-IO] ({1}) Encode Error: Failed to open file '{0}' for writing!", path, EnumNames<DataFormat>::getEnumName(format));
+            return false;
+        }
+
+        bool tryEncode(const Stream& stream, const ImageData& imgData, DataFormat format, const ImageEncodeParams& encodeParams) {
+            switch (format) {
+                default:
+                    JCORE_WARN("[Image-IO] Warning: Given encoding format is unsupported! ({0})", EnumNames<DataFormat>::getEnumName(format));
+                    return false;
+
+                case JCore::FMT_PNG:
+                    return Png::encode(stream, imgData, encodeParams.compression);
+                case JCore::FMT_BMP:
+                    return Bmp::encode(stream, imgData, encodeParams.dpi);
+                case JCore::FMT_DDS:
+                    return DDS::encode(stream, imgData);
+                case JCore::FMT_JTEX:
+                    return JTEX::encode(stream, imgData);
+            }
+        }
+    }
 }
 
