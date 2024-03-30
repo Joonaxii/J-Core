@@ -1,6 +1,7 @@
 #pragma once
 #include <J-Core/Log.h>
-#include <J-Core/Util/DataUtilities.h>
+#include <J-Core/Util/DataUtils.h>
+#include <string_view>
 
 namespace JCore {
     template<typename T> 
@@ -20,6 +21,10 @@ namespace JCore {
 
         T* get() { return _ptr; }
         const T* get() const { return _ptr; }
+
+        constexpr std::basic_string_view<T> view() const {
+            return std::basic_string_view<T>(_ptr, _length);
+        }
 
         Span<T> slice(int64_t index, size_t length) const {
             JCORE_ASSERT(_length - index >= length, "Invalid index or length!");
@@ -241,7 +246,6 @@ namespace JCore {
         size_t _length;
     };
 
-
     template<typename T>
     class ConstSpan {
     public:
@@ -262,6 +266,10 @@ namespace JCore {
 
         ConstSpan<T> slice(int64_t index) const {
             return slice(index, _length - index);
+        }
+
+        constexpr std::basic_string_view<T> view() const {
+            return std::basic_string_view<T>(_ptr, _length);
         }
 
         void copyTo(Span<T>& other) const {

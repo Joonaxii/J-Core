@@ -2,7 +2,7 @@
 #include <string>
 #include <cstdint>
 #include <stdio.h>
-#include <J-Core/Util/DataUtilities.h>
+#include <J-Core/Util/DataUtils.h>
 
 class Stream {
 public:
@@ -35,7 +35,7 @@ public:
         return write(buffer, 1, size, bigEndian);
     }
 
-    virtual size_t writeZero(const size_t count) const {
+    virtual size_t writeZero(size_t count) const {
         if (!canWrite()) { return 0; }
         void* buffer = _malloca(count);
         if (!buffer) { return 0; }
@@ -47,40 +47,79 @@ public:
     }
 
     template<typename T>
-    size_t readValue(T* data, const size_t count = 1, const bool bigEndian = false) const {
+    size_t readValue(T* data, size_t count = 1, bool bigEndian = false) const {
         if (!canRead() || count < 1) { return 0; }
         return read(data, sizeof(T), count, bigEndian);
     }
 
     template<typename T>
-    size_t readValue(T& data, const bool bigEndian) const {
+    size_t readValue(T& data, bool bigEndian) const {
         return this->readValue<T>(&data, 1, bigEndian);
     }
 
+
     template<typename T>
-    T readValue(const bool bigEndian) const {
+    T readValue(bool bigEndian = false) const {
         T temp = {};
         this->readValue<T>(&temp, 1, bigEndian);
         return temp;
     }
 
     template<typename T>
-    size_t writeValue(const T& value, const size_t count = 1, const bool bigEndian = false) const {
+    size_t writeValue(const T& value, size_t count = 1, bool bigEndian = false) const {
         if (!canWrite() || count < 1) { return 0; }
+
+        T temp{ value };
+        if (bigEndian) {
+            JCore::Data::reverseEndianess(&temp);
+        }
+
+        if constexpr (sizeof(T) <= 64) {
+            if (count < 16) {     
+                size_t written = 0;
+                for (size_t i = 0; i < count; i++) {
+                    written += write(&temp, sizeof(T), false);
+                }
+                return written;
+            }
+        }
 
         void* buffer = _malloca(count * sizeof(T));
         if (!buffer) { return 0; }
 
-        T valueTemp = value;
-        if (bigEndian) {
-            JCore::Data::reverseEndianess(&valueTemp, sizeof(T), 1);
-        }
-
-        std::fill_n(reinterpret_cast<T*>(buffer), count, valueTemp);
+        std::fill_n(reinterpret_cast<T*>(buffer), count, temp);
        
         size_t ret = write(buffer, 1, count * sizeof(T));
         _freea(buffer);
         return ret;
+    }
+
+    bool readLine(std::string& output) const {
+        output.clear();
+
+        if (_position >= _length || !canRead()) {
+            return false;
+        }
+
+        char temp[8192]{ 0 };
+        size_t pos = _position;
+        while (true) {
+            size_t read = this->read(temp, 8192, false);
+            if (read <= 0) { break; }
+            for (size_t i = 0; i < read; i++)
+            {
+                switch (temp[i]) {
+                    case '\r':
+                        continue;
+                    case '\n':
+                        seek(pos + i + 1, SEEK_SET);
+                        return true;
+                }
+                output.push_back(temp[i]);
+            }
+            pos += read;
+        }
+        return true;
     }
 
     int32_t readCString(char* str, int32_t maxLen) const {

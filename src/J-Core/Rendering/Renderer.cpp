@@ -132,7 +132,7 @@ namespace JCore {
         release();
     }
 
-    bool Renderer::initialize(const char* title, uint32_t width, uint32_t height) {
+    bool Renderer::initialize(const char* title, uint32_t width, uint32_t height, int32_t icon) {
         if (_initialized) {
             JCORE_WARN("Warning: Renderer already initialized!");
             return true;
@@ -144,7 +144,7 @@ namespace JCore {
             return false;
         }
 
-        if (!_window.initialize(title, width, height)) {
+        if (!_window.initialize(title, width, height, icon)) {
             JCORE_ERROR("Error: Failed to initialize window!");
             release();
             return false;

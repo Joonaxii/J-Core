@@ -3,12 +3,12 @@
 
 namespace JCore {
     namespace Data {
-        static void adlerCRCBegin(uint32_t& sum1, uint32_t& sum2) {
+        inline void adlerCRCBegin(uint32_t& sum1, uint32_t& sum2) {
             sum1 = 1;
             sum2 = 0;
         }
 
-        static void adlerCRCUpdate(uint32_t& sum1, uint32_t& sum2, const void* data, size_t length) {
+        inline void adlerCRCUpdate(uint32_t& sum1, uint32_t& sum2, const void* data, size_t length) {
             static constexpr uint32_t MODULO = 65521;
 
             const uint8_t* dataB = reinterpret_cast<const uint8_t*>(data);
@@ -18,11 +18,11 @@ namespace JCore {
             }
         }
 
-        static uint32_t adlerCRCEnd(uint32_t& sum1, uint32_t& sum2) {
+        inline  uint32_t adlerCRCEnd(uint32_t& sum1, uint32_t& sum2) {
             return (sum2 << 16) | sum1;
         }
 
-        static uint32_t calcAdlerCRC(uint32_t crc, const void* data, size_t length) {
+        inline uint32_t calcAdlerCRC(uint32_t crc, const void* data, size_t length) {
             static constexpr uint32_t MODULO = 65521;
 
             const uint8_t* dataB = reinterpret_cast<const uint8_t*>(data);
@@ -35,7 +35,7 @@ namespace JCore {
             return (sum2 << 16) | sum1;
         }
 
-        static uint32_t updateCRC(uint32_t crc, const void* data, size_t length) {
+        inline uint32_t updateCRC(uint32_t crc, const void* data, size_t length) {
             if (length < 1 || !data) { return crc; }
 
             static bool isInit(false);
@@ -65,13 +65,25 @@ namespace JCore {
             return crc;
         }
 
+        inline uint32_t updateCRC(uint32_t crc, std::string_view view) {
+            return updateCRC(crc, view.data(), view.size());
+        }
+
+        inline uint32_t calcuateCRC(const void* data, size_t length) {
+            return updateCRC(0xFFFFFFFFU, data, length);
+        }
+
+        inline uint32_t calcuateCRC(std::string_view view) {
+            return updateCRC(0xFFFFFFFFU, view.data(), view.size());
+        }
+
         template<typename T, size_t bufSize>
-        static uint32_t updateCRC(uint32_t crc, const T(&buffer)[bufSize]) {
+        inline uint32_t updateCRC(uint32_t crc, const T(&buffer)[bufSize]) {
             return updateCRC(crc, buffer, bufSize * sizeof(T));
         }
 
         template<typename T>
-        static uint32_t updateCRC(uint32_t crc, const T& value) {
+        inline uint32_t updateCRC(uint32_t crc, const T& value) {
             return updateCRC(crc, &value, sizeof(T));
         }
 
@@ -85,7 +97,7 @@ namespace JCore {
             return value = read<T>(data);
         }
 
-        static void reverseCopy(void* dst, const void* src, size_t elementSize, size_t count) {
+        inline void reverseCopy(void* dst, const void* src, size_t elementSize, size_t count) {
             size_t totalLen = count * elementSize;
 
             uint8_t* dstP = reinterpret_cast<uint8_t*>(dst) + (totalLen - elementSize);
@@ -97,7 +109,7 @@ namespace JCore {
             }
         }
 
-        static void reverseEndianess(void* buffer, size_t elementSize, size_t count) {
+        inline void reverseEndianess(void* buffer, size_t elementSize, size_t count) {
             if (elementSize < 2 || !buffer) { return; }
             uint8_t* data = reinterpret_cast<uint8_t*>(buffer);
 
@@ -114,7 +126,7 @@ namespace JCore {
             }
         }
         template<typename T>
-        static void reverseEndianess(T* buffer, size_t count = 1) {
+        void reverseEndianess(T* buffer, size_t count = 1) {
             if (sizeof(T) < 2 || !buffer) { return; }
             reverseEndianess(buffer, sizeof(T), count);
         }

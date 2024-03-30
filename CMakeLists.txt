@@ -11,6 +11,7 @@ project ("J-Core")
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SPDLOG_BUILD_WARNINGS OFF CACHE BOOL "" FORCE)
 
 set(JCORE_GUI_SOURCES )
 
@@ -26,6 +27,11 @@ IF (WIN32)
 	add_compile_definitions(WIN32_LEAN_AND_MEAN)
 	add_compile_definitions(NOMINMAX)
 ENDIF(WIN32)
+
+target_compile_options(
+    spdlog PRIVATE
+    /external:W0
+)
 
 # OpenGL Glew files
 set(GLEW_SRC
@@ -119,6 +125,12 @@ set(JCORE_MAIN_SRC
 	"include/J-Core/IO/ImageUtils.h"
 	"src/J-Core/IO/ImageUtils.cpp"
 	
+	"include/J-Core/IO/Audio.h"
+	"src/J-Core/IO/Audio.cpp"
+	
+	"include/J-Core/IO/AudioUtils.h"
+	"src/J-Core/IO/AudioUtils.cpp"
+	
 	"include/J-Core/IO/IOUtils.h"
 	"src/J-Core/IO/IOUtils.cpp"
 	
@@ -126,19 +138,19 @@ set(JCORE_MAIN_SRC
 	"src/J-Core/IO/ZLib.cpp"
 	
 	"include/J-Core/IO/Base64.h"
-	"src/J-Core/IO/Base64.cpp"
 )
 source_group("J-Core/IO" FILES ${JCORE_MAIN_SRC})
 list(APPEND JCORE_GUI_SOURCES ${JCORE_MAIN_SRC})
 
 set(JCORE_MAIN_SRC
 	"include/J-Core/Util/EnumUtils.h"
-	"include/J-Core/Util/DataUtilities.h"
+	"include/J-Core/Util/DataUtils.h"
 	"include/J-Core/Util/IComparable.h"
 	"include/J-Core/Util/Span.h"
+	"include/J-Core/Util/HexStr.h"
 	
-	"src/J-Core/Util/StringHelpers.cpp"
-	"include/J-Core/Util/StringHelpers.h"
+	"src/J-Core/Util/StringUtils.cpp"
+	"include/J-Core/Util/StringUtils.h"
 	
 	"src/J-Core/Util/Bitset.cpp"
 	"include/J-Core/Util/Bitset.h"
@@ -192,6 +204,12 @@ list(APPEND JCORE_GUI_SOURCES ${JCORE_MAIN_SRC})
 find_package(OpenGL REQUIRED)
 add_library(J-Core STATIC ${JCORE_GUI_SOURCES})
 target_link_libraries(J-Core OpenGL::GL glfw ImGUI glm zlibstatic spdlog nlohmann_json)
+
+
+target_compile_options(
+    J-Core PUBLIC
+    /external:W0
+)
 
 target_include_directories(J-Core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/ext/zlib)
 

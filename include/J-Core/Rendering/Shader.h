@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <J-Core/Math/Matrix4f.h>
 

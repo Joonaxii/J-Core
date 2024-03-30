@@ -8,7 +8,7 @@
 #include <J-Core/Rendering/Window.h>
 #include <J-Core/Rendering/Renderer.h>
 #include <J-Core/IO/Image.h>
-#include <J-Core/Util/StringHelpers.h>
+#include <J-Core/Util/StringUtils.h>
 
 #include <io.h>
 #include <J-Core/IO/FileStream.h>
@@ -17,7 +17,29 @@
 
 
 namespace JCore::Gui {
-    bool searchDialogCenter(const char* label, uint8_t flags, char path[513], const char* types, const size_t defaultType) {
+    static int32_t getTextureSaveInfoMode(const std::shared_ptr<Texture>& tex) {
+        auto format = tex->getFormat();
+        switch (format) {
+        case JCore::TextureFormat::Indexed8:
+        case JCore::TextureFormat::Indexed16:
+            return 0;
+        default: return 0;
+        }
+    }
+
+    void clearGuiInput(const char* label) {
+        const ImGuiID id = ImGui::GetCurrentWindow()->GetID(label);
+        auto inputState = ImGui::GetInputTextState(id);
+
+        if (inputState && inputState->ID == id) {
+            inputState->ClearSelection();
+            inputState->ClearText();
+            inputState->CursorAnimReset();
+            inputState->ID = 0;
+        }
+    }
+
+    bool searchDialogCenter(const char* label, uint8_t flags, std::string& path, const char* types, size_t defaultType) {
         ImGui::BeginGroup();
         ImGui::PushID(label);
         float sqSize = ImGui::GetFrameHeight();
@@ -30,13 +52,30 @@ namespace JCore::Gui {
         ImGui::SameLine();
 
         ImGui::PushItemWidth(inputW);
-        bool changed = ImGui::InputTextWithHint("##Path", label, path, 512);
+
+        bool changed = ImGui::InputTextWithHint("##Path", label, &path);
         if ((flags & 0x1) && !(ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) && ImGui::GetHoveredID() == ImGui::GetItemID()) {
             auto& allPaths = Window::getBufferedFileDrops();
             if (allPaths.size() > 0) {
-                memcpy(path, allPaths[0].c_str(), allPaths[0].length());
-                path[allPaths[0].length()] = 0;
-                changed |= true;
+
+                if (types == nullptr) {
+                    for (size_t i = 0; i < allPaths.size(); i++) {
+                        if (fs::is_directory(allPaths[i])) {
+                            path = allPaths[i];
+                            changed |= true;
+                            break;
+                        }
+                    }
+                }
+                else {
+                    for (size_t i = 0; i < allPaths.size(); i++) {
+                        if (fs::is_regular_file(allPaths[i]) && IO::matchFilter(allPaths[i], types)) {
+                            path = allPaths[i];
+                            changed |= true;
+                            break;
+                        }
+                    }
+                }
                 Window::clearFileDrops();
             }
         }
@@ -47,16 +86,14 @@ namespace JCore::Gui {
             if (types == nullptr) {
                 auto str = IO::openFolder("Search folder");
                 if (str.length() > 0) {
-                    memset(path, 0, 513);
-                    memcpy(path, str.c_str(), std::min<size_t>(512, str.length()));
+                    path = str;
                     changed = true;
                 }
             }
             else {
-                auto str = IO::openFile(types, false, false, defaultType);
+                auto str = IO::openFile(types, 260, false, false, defaultType);
                 if (str.length() > 0) {
-                    memset(path, 0, 513);
-                    memcpy(path, str.c_str(), std::min<size_t>(512, str.length()));
+                    path = str;
                     changed = true;
                 }
             }
@@ -64,21 +101,9 @@ namespace JCore::Gui {
         ImGui::PopID();
         ImGui::EndGroup();
         return changed;
-
-        return false;
     }
 
-    int32_t getTextureSaveInfoMode(const std::shared_ptr<Texture>& tex) {
-        auto format = tex->getFormat();
-        switch (format) {
-            case JCore::TextureFormat::Indexed8:
-            case JCore::TextureFormat::Indexed16:
-                return 0;
-            default: return 0;
-        }
-    }
-
-    bool searchDialogLeft(const char* label, uint8_t flags, char path[513], const char* types, const size_t defaultType) {
+    bool searchDialogLeft(const char* label, uint8_t flags, std::string& path, const char* types, size_t defaultType) {
         ImGui::BeginGroup();
         ImGui::PushID(label);
         float sqSize = ImGui::GetFrameHeight();
@@ -87,13 +112,37 @@ namespace JCore::Gui {
         ImGui::SameLine();
 
         ImGui::PushItemWidth(std::max(width - sqSize - 5, 120.0f));
-        bool changed = ImGui::InputTextWithHint("##Path", label, path, 512);
+
+        bool changed = ImGui::InputTextWithHint("##Path", label, &path);
+        if (changed) {
+            IO::fixPath(path.data(), path.length());
+        }
         if ((flags & 0x1) && !(ImGui::GetCurrentContext()->CurrentItemFlags & ImGuiItemFlags_Disabled) && ImGui::GetHoveredID() == ImGui::GetItemID()) {
             auto& allPaths = Window::getBufferedFileDrops();
             if (allPaths.size() > 0) {
-                memcpy(path, allPaths[0].c_str(), allPaths[0].length());
-                path[allPaths[0].length()] = 0;
-                changed |= true;
+                if (types == nullptr) {
+                    for (size_t i = 0; i < allPaths.size(); i++) {
+                        if (fs::is_directory(allPaths[i])) {
+                            clearGuiInput("##Path");
+
+                            path = allPaths[i];
+                            IO::fixPath(path.data(), path.length());
+                            changed |= true;
+                            break;
+                        }
+                    }
+                }
+                else {
+                    for (size_t i = 0; i < allPaths.size(); i++) {
+                        if (fs::is_regular_file(allPaths[i]) && IO::matchFilter(allPaths[i], types)) {
+                            clearGuiInput("##Path");
+                            path = allPaths[i];
+                            IO::fixPath(path.data(), path.length());
+                            changed |= true;
+                            break;
+                        }
+                    }
+                }
                 Window::clearFileDrops();
             }
         }
@@ -104,16 +153,16 @@ namespace JCore::Gui {
             if (types == nullptr) {
                 auto str = IO::openFolder("Search folder");
                 if (str.length() > 0) {
-                    memset(path, 0, 513);
-                    memcpy(path, str.c_str(), std::min<size_t>(512, str.length()));
+                    path = str;
+                    IO::fixPath(path.data(), path.length());
                     changed = true;
                 }
             }
             else {
-                auto str = IO::openFile(types, 260, false, false, defaultType);
+                auto str = IO::openFile(types, 260, false, false, defaultType, path);
                 if (str.length() > 0) {
-                    memset(path, 0, 513);
-                    memcpy(path, str.c_str(), std::min<size_t>(512, str.length()));
+                    path = str;
+                    IO::fixPath(path.data(), path.length());
                     changed = true;
                 }
             }
@@ -171,7 +220,7 @@ namespace JCore::Gui {
         }
 
         char tempBuf[256]{ 0 };
-        Helpers::formatDataSize(tempBuf, calculateTextureSize(texture->getWidth(), texture->getHeight(), texture->getFormat(), texture->getPaletteSize()));
+        Utils::formatDataSize(tempBuf, calculateTextureSize(texture->getWidth(), texture->getHeight(), texture->getFormat(), texture->getPaletteSize()));
         ImGui::Text(" - Memory Usage : %s", tempBuf);
         ImGui::EndChildFrame();
     }
@@ -508,4 +557,106 @@ namespace JCore::Gui {
         window->DrawList->PathStroke(color, false, thickness);
         return true;
     }
+
+
+    bool drawBitMask(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc, bool allowMultiple, bool displayAll) {
+        size = Math::min(size, 8ULL);
+        uint64_t bitCount = (size << 3);
+        length = Math::min(length, bitCount - start);
+        if (length <= 0) { return false; }
+
+        uint64_t bits = 0;
+        memcpy(&bits, value, size);
+
+        bool changed = false;
+        char temp[257]{ 0 };
+        uint64_t tempL = 0;
+        uint64_t bitsSet = 0;
+        bool wasSet = false;
+        for (uint64_t i = 0, j = 1ULL << start; i < length; i++, j <<= 1) {
+            if (tempL >= 256) { break; }
+            if (bits & j) {
+                if (!wasSet) {
+                    bitsSet++;
+                    wasSet = !allowMultiple;
+
+                    if (tempL > 0) {
+                        memcpy(temp + tempL, ", ", 2);
+                        tempL += 2;
+                    }
+                    std::string_view name = nameFunc(&j);
+                    memcpy(temp + tempL, name.data(), name.length());
+                    tempL += name.length();
+                }
+                else { changed |= true; }
+            }
+        }
+
+        if (tempL == 0) {
+            sprintf_s(temp, "None");
+        }
+        else if (bitsSet == length && displayAll) {
+            sprintf_s(temp, "Everything");
+        }
+
+        uint64_t mask = ((1ULL << length) - 1) << start;
+        if (ImGui::BeginCombo(label, temp, ImGuiComboFlags_HeightLarge)) {
+            ImGui::Indent();
+            ImGui::PushID("Elements");
+
+            for (uint64_t i = 0, j = 1ULL << start; i < length; i++, j <<= 1) {
+                bool tempBool = (bits & j) != 0;
+
+                ImGui::PushID(&i);
+                if (ImGui::Checkbox(nameFunc(&j), &tempBool)) {
+                    changed = true;
+                    if (tempBool) {
+                        if (!allowMultiple) {
+                            uint64_t negate = (mask & ~j);
+                            bits &= ~negate;
+                        }
+                        bits |= j;
+                    }
+                    else { bits &= ~j; }
+                }
+                ImGui::PopID();
+            }
+
+            ImGui::PopID();
+            ImGui::Unindent();
+            ImGui::EndCombo();
+        }
+
+        if (changed) {
+            JE_COPY(value, &bits, size);
+        }
+        return changed;
+    }
+
+    bool drawDropdown(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc) {
+        bool changed = false;
+        uint64_t selectI = 0;
+        size = Math::min(size, sizeof(uint64_t));
+        JE_COPY(&selectI, value, size);
+
+        if (ImGui::BeginCombo(label, nameFunc(&selectI)))
+        {
+            for (uint64_t i = 0, j = start; i < length; i++, j++) {
+                std::string_view name = nameFunc(&j);
+                if (name.length() < 1) { continue; }
+
+                ImGui::PushID(&i);
+                if (ImGui::Selectable(name, bool(j == selectI), 0)) {
+                    selectI = j;
+                    JE_COPY(value, &selectI, size);
+                    changed = true;
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndCombo();
+        }
+        return changed;
+    }
+
+
 }

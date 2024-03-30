@@ -299,64 +299,6 @@ namespace JCore {
         return REMAPPED[value];
     }
 
-    void unpackRGB565(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b) {
-        static uint8_t RGB565LUT[32 + 64]{};
-        static bool init{ false };
-
-        if (!init) {
-            for (size_t i = 0; i < 32; i++) {
-                RGB565LUT[i] = uint8_t((i * 255) / 31);
-            }
-
-            for (size_t i = 0; i < 64; i++) {
-                RGB565LUT[i + 32] = uint8_t((i * 255) / 63);
-            }
-            init = true;
-        }
-
-        r = RGB565LUT[(value & RED_MASK_565)];
-        g = RGB565LUT[32 + ((value & GREEN_MASK_565) >> 5)];
-        b = RGB565LUT[(value & BLUE_MASK_565) >> 11];
-    }
-
-    void unpackRGB555(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b) {
-        uint8_t a{};
-        unpackRGB555(value, r, g, b, a);
-    }
-
-    void unpackRGB555(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
-        static uint8_t RGB555LUT[32]{};
-        static bool init{ false };
-
-        if (!init) {
-            for (size_t i = 0; i < 32; i++) {
-                RGB555LUT[i] = uint8_t((i * 255) / 31);
-            }
-            init = true;
-        }
-
-        r = RGB555LUT[(value & RED_MASK_555)];
-        g = RGB555LUT[(value & GREEN_MASK_555) >> 5];
-        b = RGB555LUT[(value & BLUE_MASK_555) >> 10];
-        a = value & ALPHA_MASK_555 ? 0xFF : 0x00;
-    }
-
-    void unpackRGB4444(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a) {
-        static uint8_t RGB4444LUT[32]{};
-        static bool init{ false };
-
-        if (!init) {
-            for (size_t i = 0; i < 16; i++) {
-                RGB4444LUT[i] = uint8_t((i * 255) / 15);
-            }
-            init = true;
-        }
-        r = RGB4444LUT[value & 0xF];
-        g = RGB4444LUT[(value >> 4) & 0xF];
-        b = RGB4444LUT[(value >> 8) & 0xF];
-        a = RGB4444LUT[(value >> 12) & 0xF];
-    }
-
     size_t calculateTextureSize(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize) {
         switch (format) {
             case JCore::TextureFormat::R8:
@@ -450,8 +392,11 @@ namespace JCore {
         }
     }
 
-    void ImageData::resize(int32_t newWidth, int32_t newHeight, uint8_t* buffer) {
+    void ImageData::resize(int32_t newWidth, int32_t newHeight, bool linear, ImageData* tempBuffer) {
         if ((newWidth == width && newHeight == height) || ((newHeight & newWidth) & 0x7FFFFFFF) == 0 || !data) { return; }
+
+        ImageData tmpIM{};
+        ImageData& tmp = tempBuffer ? *tempBuffer : tmpIM;
 
         int32_t oldW = width;
         int32_t oldH = height;
@@ -460,34 +405,144 @@ namespace JCore {
         int32_t resoNew = newWidth * newHeight;
         int32_t resoOld = width * height;
 
-        bool newBuf = buffer == nullptr;
-
-        size_t offset = isIndexed() ? paletteSize * sizeof(Color32) : 0;
-        uint8_t* selfBuf = data + offset;
-
-        if (newBuf) {
-            buffer = reinterpret_cast<uint8_t*>(_malloca(resoOld * bpp));
-            if (!buffer) { return; }
+        if (!tmp.doAllocate(width, height, format, paletteSize, flags)) {
+            return;
         }
-        memcpy(buffer, selfBuf, resoOld * bpp);
+        memcpy(tmp.data, data, getSize());
 
-        width = newWidth;
-        height = newHeight;
+        if (!doAllocate(newWidth, newHeight, format)) {
+            width = oldW;
+            height = oldH;
 
-        if (resoNew > resoOld) { doAllocate(); }
+            if (!tempBuffer) {
+                tmp.clear(true);
+            }
+            return;
+        }
+        switch (format)
+        {
+        default:
+            linear = false;
+            break;
+        case TextureFormat::RGB24:
+        case TextureFormat::RGBA32:
+            break;
+        }
 
-        int32_t off = newWidth * bpp;
-        int32_t offOld = oldW * bpp;
-        for (size_t y = 0, yP = 0; y < newHeight; y++, yP += off) {
-            int32_t srY = Math::lerp<int32_t>(0, (oldH - 1), y / float(newHeight - 1.0f)) * offOld;
-            for (size_t x = 0, xP = yP; x < newWidth; x++, xP += bpp) {
-                int32_t srX = Math::lerp<int32_t>(0, (oldW - 1), x / float(newWidth - 1.0f)) * bpp;
-                memcpy(data + xP, buffer + srY + srX, bpp);
+
+        int32_t scan = newWidth * bpp;
+        int32_t scanOld = oldW * bpp;
+        if (linear) {
+            const uint8_t* bufferIn = tmp.getData();
+            uint8_t* bufferOut = this->getData();
+            Color32 clr32[4]{
+                {0x00, 0x00, 0x00, 0x00},
+                {0x00, 0x00, 0x00, 0x00},
+                {0x00, 0x00, 0x00, 0x00},
+                {0x00, 0x00, 0x00, 0x00},
+            };
+
+            float xs = (float)oldW / width;
+            float ys = (float)oldH / height;
+
+            float fracx{ 0 }, fracy{ 0 }, ifracx{ 0 }, ifracy{ 0 }, sx{ 0 }, sy{ 0 }, l0{ 0 }, l1{ 0 }, rf{ 0 }, gf{ 0 }, bf{ 0 };
+            int32_t  x0{ 0 }, x1{ 0 }, y0{ 0 }, y1{ 0 };
+
+            Color32 out{ 0x00, 0x00, 0x00, 0xFF };
+
+            int32_t srcIdx = 0;
+
+            for (int32_t y = 0, yP = 0; y < newHeight; y++, yP += scan) {
+                for (int32_t x = 0, xP = yP; x < newWidth; x++, xP += bpp) {
+                    sx = x * xs;
+                    sy = y * ys;
+                    x0 = (int)sx;
+                    y0 = (int)sy;
+
+                    // Calculate coordinates of the 4 interpolation points
+                    fracx = sx - x0;
+                    fracy = sy - y0;
+                    ifracx = 1.0f - fracx;
+                    ifracy = 1.0f - fracy;
+                    x1 = x0 + 1;
+                    if (x1 >= oldW)
+                    {
+                        x1 = x0;
+                    }
+                    y1 = y0 + 1;
+                    if (y1 >= oldH)
+                    {
+                        y1 = y0;
+                    }
+
+                    // Read source color
+                    const uint8_t* c = (bufferIn + (y0 * scanOld) + x0 * bpp);
+                    memcpy(clr32 + 0, c, bpp);
+
+                    c = bufferIn + (y0 * scanOld + x1 * bpp);
+                    memcpy(clr32 + 1, c, bpp);
+
+                    c = bufferIn + (y1 * scanOld + x0 * bpp);
+                    memcpy(clr32 + 2, c, bpp);
+
+                    c = bufferIn + (y1 * scanOld + x1 * bpp);
+                    memcpy(clr32 + 3, c, bpp);
+
+                    // Calculate colors
+                    // Alpha
+                    l0 = ifracx * clr32[0].a + fracx * clr32[1].a;
+                    l1 = ifracx * clr32[2].a + fracx * clr32[3].a;
+                    out.a = uint8_t(ifracy * l0 + fracy * l1);
+
+                    // Write destination
+                    if (out.a > 0)
+                    {
+                        // Red
+                        l0 = ifracx * clr32[0].r + fracx * clr32[1].r;
+                        l1 = ifracx * clr32[2].r + fracx * clr32[3].r;
+                        rf = ifracy * l0 + fracy * l1;
+
+                        // Green
+                        l0 = ifracx * clr32[0].g + fracx * clr32[1].g;
+                        l1 = ifracx * clr32[2].g + fracx * clr32[3].g;
+                        gf = ifracy * l0 + fracy * l1;
+
+                        // Blue
+                        l0 = ifracx * clr32[0].b + fracx * clr32[1].b;
+                        l1 = ifracx * clr32[2].b + fracx * clr32[3].b;
+                        bf = ifracy * l0 + fracy * l1;
+
+                        // Cast to byte
+                        out.r = uint8_t(Math::clamp(rf, 0.0f, 255.0f));
+                        out.g = uint8_t(Math::clamp(gf, 0.0f, 255.0f));
+                        out.b = uint8_t(Math::clamp(bf, 0.0f, 255.0f));
+                    }
+                    else
+                    {
+                        out.r = 0x00;
+                        out.g = 0x00;
+                        out.b = 0x00;
+                        out.a = 0x00;
+                    }
+                    memcpy(bufferOut + xP, &out, bpp);
+                }
+            }
+        }
+        else {
+            const uint8_t* bufferIn = tmp.getData();
+            uint8_t* bufferOut = this->getData();
+            for (int32_t y = 0, yP = 0; y < newHeight; y++, yP += scan) {
+                int32_t srY = int32_t((oldH - 1) * (y / float(newHeight - 1.0f))) * scanOld;
+                for (int32_t x = 0, xP = yP; x < newWidth; x++, xP += bpp) {
+                    int32_t srX = int32_t((oldW - 1) * x / float(newWidth - 1.0f)) * bpp;
+                    memcpy(bufferOut + xP, bufferIn + srY + srX, bpp);
+                }
             }
         }
 
-        if (newBuf) {
-            _freea(buffer);
+
+        if (!tempBuffer) {
+            tmp.clear(true);
         }
     }
 

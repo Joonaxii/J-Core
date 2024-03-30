@@ -4,6 +4,7 @@
 #include <J-Core/Math/Matrix4f.h>
 #include <string>
 #include <vector>
+#include <J-Core/IO/ImageUtils.h>
 using DragCB = void(*)(int count, const char** paths);
 
 struct GLFWwindow;
@@ -39,7 +40,7 @@ namespace JCore {
         int32_t getWidth()  const { return _size.x; }
         int32_t getHeight() const { return _size.y; }
 
-        bool initialize(const char* title, uint32_t width = 1280, uint32_t height = 720);
+        bool initialize(const char* title, uint32_t width = 1280, uint32_t height = 720, int32_t icon = 101);
         void close();
 
         void resetViewport(const uint8_t flags = FLAG_VIEW | FLAG_SCISSOR);
@@ -68,6 +69,7 @@ namespace JCore {
 
         Matrix4f _worldProjection;
         Matrix4f _screenProjection;
+        JCore::ImageData _iconData;
         glm::i32vec2 _size;
         glm::i32vec2 _minSize;
         bool _isMinimized;

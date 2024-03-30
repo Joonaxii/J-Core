@@ -1,8 +1,13 @@
 #include <J-Core/Rendering/Window.h>
+
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+
 #include <iostream>
 #include <ext.hpp>
+#include <windows.h>
 #include <J-Core/Log.h>
 
 namespace JCore {
@@ -13,13 +18,16 @@ namespace JCore {
     uint32_t  Window::_fileDropTick{ };
 
     Window::Window() : _context(), _isMinimized(true), _size(), _minSize() { Instance = this; }
-    Window::~Window() { Instance = Instance == this ? nullptr : Instance; close(); }
+    Window::~Window() { 
+        Instance = Instance == this ? nullptr : Instance; 
+        close(); 
+    }
 
     Window* Window::getInstance() {
         return Instance;
     }
 
-    bool Window::initialize(const char* title, uint32_t width, uint32_t height) {
+    bool Window::initialize(const char* title, uint32_t width, uint32_t height, int32_t icon) {
         if (getNativeWindow()) { return true; }
 
         _minSize.x = width >> 2;
@@ -37,8 +45,10 @@ namespace JCore {
             return false;
         }
 
-        glfwMakeContextCurrent(getNativeWindow());
+        glfwMakeContextCurrent(getNativeWindow());  
 
+        SetClassLongPtrA(glfwGetWin32Window(getNativeWindow()), GCLP_HICON, (LONG_PTR)LoadIconA(GetModuleHandleA(NULL), MAKEINTRESOURCE(icon)));
+     
         //Init Glew
         if (glewInit() != GLEW_OK) {
             JCORE_ERROR("Error: Failed to initialize GLEW!");
@@ -65,6 +75,7 @@ namespace JCore {
 
         glfwSetWindowSizeCallback(getNativeWindow(), NULL);
         _context.close();
+        _iconData.clear(true);
     }
 
     void Window::resetViewport(const uint8_t flags) {

@@ -15,130 +15,6 @@ namespace JCore {
     template<typename T>
     using PixelConvert = std::function<void(const uint8_t*, const uint8_t*, T*)>;
 
-    template<typename T>
-    struct BezierCurve {
-    public:
-        float points[4]{ 0 };
-
-        BezierCurve() : points{ 0, 1, 0, 1 } {
-            bake();
-        }
-
-        BezierCurve(const glm::vec2& p0, const glm::vec2& p1) : points{ p0.x, p0.y, p1.x, p1.y } {
-            bake();
-        }
-
-        const T* getValues() const { return _table; }
-
-        const T* evaluate(float t) const {
-            return _table + size_t((t < 0 ? 0 : t> 1 ? 1 : t) * 512);
-        }
-
-        const T* evaluate(uint32_t t) const {
-            t = t > 255 ? 255 : t;
-            return _table + t * 2;
-        }
-
-        const glm::vec2 getNormalized(uint32_t index) const {
-            index = index > 255 ? 255 : index;
-            index *= 2;
-            return {
-            Math::inverseLerp<T, float>(std::numeric_limits<T>::min(), std::numeric_limits<T>::max(), float(_table[index])),
-            Math::inverseLerp<T, float>(std::numeric_limits<T>::min(), std::numeric_limits<T>::max(), float(_table[index + 1])),
-            };
-        }
-
-        void bake() {
-            glm::vec2 P[4]{ {0, 0}, {points[0], points[1]}, {points[2], points[3]}, {1, 1}};
-            static float C[256 * 4]{ 0 }, * K = 0;
-            if (!K) {
-                K = C;
-                for (size_t step = 0; step < 256; ++step) {
-                    float t = (float)step / (float)255;
-                    C[step * 4 + 0] = (1 - t) * (1 - t) * (1 - t);
-                    C[step * 4 + 1] = 3 * (1 - t) * (1 - t) * t;
-                    C[step * 4 + 2] = 3 * (1 - t) * t * t;
-                    C[step * 4 + 3] = t * t * t;
-                }
-            }
-
-            for (size_t step = 0, stepX = 0, stepP = 0; step < 256; step++, stepX += 4, stepP += 2) {
-               float temp = K[stepX + 0] * P[0].x + K[stepX + 1] * P[1].x + K[stepX + 2] * P[2].x + K[stepX + 3] * P[3].x;
-               temp = temp < 0 ? 0 : temp > 1 ? 1 : temp;
-               _table[stepP] = (Math::lerp<T>(std::numeric_limits<T>::min(), std::numeric_limits<T>::max(), temp));
-
-               temp = K[stepX + 0] * P[0].y + K[stepX + 1] * P[1].y + K[stepX + 2] * P[2].y + K[stepX + 3] * P[3].y;
-               temp = temp < 0 ? 0 : temp > 1 ? 1 : temp;
-               _table[stepP + 1] = (Math::lerp<T>(std::numeric_limits<T>::min(), std::numeric_limits<T>::max(), temp));
-            }
-        }
-
-    private:
-        T _table[256*2]{ 0 };
-    };
-
-    template<>
-    void BezierCurve<float>::bake() {
-        glm::vec2 P[4]{ {0, 0}, {points[0], points[1]}, {points[2], points[3]},  {1, 1} };
-        static float C[(256 + 1) * 4]{ 0 }, * K = 0;
-        if (!K) {
-            K = C;
-            for (size_t step = 0; step <= 256; ++step) {
-                float t = (float)step * (1.0f / 256.0f);
-                C[step * 4 + 0] = (1 - t) * (1 - t) * (1 - t);
-                C[step * 4 + 1] = 3 * (1 - t) * (1 - t) * t;
-                C[step * 4 + 2] = 3 * (1 - t) * t * t;
-                C[step * 4 + 3] = t * t * t;
-            }
-        }
-
-        for (size_t step = 0, stepX = 0, stepP = 0; step <= 256; step++, stepX += 4, stepP += 2) {
-            _table[stepP] = K[stepX + 0] * P[0].x + K[stepX + 1] * P[1].x + K[stepX + 2] * P[2].x + K[stepX + 3] * P[3].x;
-            _table[stepP + 1] = K[stepX + 0] * P[0].y + K[stepX + 1] * P[1].y + K[stepX + 2] * P[2].y + K[stepX + 3] * P[3].y;
-        }
-    }
-
-    template<>
-    const glm::vec2 BezierCurve<float>::getNormalized(uint32_t index) const {
-        index = index > 255 ? 255 : index;
-        index *= 2;
-        return {
-        _table[index],
-        _table[index + 1],
-        };
-    }
-
-    template<> 
-    void BezierCurve<double>::bake() {
-        glm::dvec2 P[4]{ {0, 0}, {points[0], points[1]}, {points[2], points[3]},  {1, 1} };
-        static double C[(256 + 1) * 4]{ 0 }, * K = 0;
-        if (!K) {
-            K = C;
-            for (size_t step = 0; step <= 256; ++step) {
-                double t = (double)step * (1.0 / 256.0);
-                C[step * 4 + 0] = (1 - t) * (1 - t) * (1 - t);
-                C[step * 4 + 1] = 3 * (1 - t) * (1 - t) * t;
-                C[step * 4 + 2] = 3 * (1 - t) * t * t;
-                C[step * 4 + 3] = t * t * t;
-            }
-        }
-
-        for (size_t step = 0, stepX = 0, stepP = 0; step <= 256; step++, stepX += 4, stepP += 2) {
-            _table[stepP] = K[stepX + 0] * P[0].x + K[stepX + 1] * P[1].x + K[stepX + 2] * P[2].x + K[stepX + 3] * P[3].x;
-            _table[stepP + 1] = K[stepX + 0] * P[0].y + K[stepX + 1] * P[1].y + K[stepX + 2] * P[2].y + K[stepX + 3] * P[3].y;
-        }
-    }
-
-    template<>
-    const glm::vec2 BezierCurve<double>::getNormalized(uint32_t index) const {
-        index = index > 255 ? 255 : index;
-        index *= 2;
-        return {
-        float(_table[index]),
-        float(_table[index + 1]),
-        };
-    }
-
     enum class TextureFormat : uint8_t {
         Unknown,
 
@@ -222,31 +98,34 @@ namespace JCore {
     uint8_t quantizeUI8(uint8_t value, int32_t bits);
 
     uint8_t remapUI16ToUI8(uint16_t value);
-    inline uint8_t remapUI4ToUI8(uint8_t value) {
-        static uint8_t LUT[16]{
-            0,
-            (1 * 255) / 15,
-            (2 * 255) / 15,
-            (3 * 255) / 15,
-            (4 * 255) / 15,
-            (5 * 255) / 15,
-            (6 * 255) / 15,
-            (7 * 255) / 15,
-            (8 * 255) / 15,
-            (9 * 255) / 15,
-            (10 * 255) / 15,
-            (11 * 255) / 15,
-            (12 * 255) / 15,
-            (13 * 255) / 15,
-            (14 * 255) / 15,
-            (15 * 255) / 15,
-        };
-        return LUT[value & 0xF];
+
+    template<uint8_t bits>
+    inline uint8_t remapUI8Bits(uint8_t value) {
+        if (bits >= 8 || bits < 1) { return value; }
+        static constexpr uint8_t BIT_MASK = (1 << bits) - 1;
+
+        static uint8_t TABLE[1 << bits]{ 0xFF };
+        if (TABLE[0] == 0xFF) {
+            for (size_t i = 0; i <= BIT_MASK; i++) {
+                TABLE[i] = uint8_t((i / float(BIT_MASK)) * 255.0f);
+            }
+        }
+        return TABLE[value & BIT_MASK];
     }
-    void unpackRGB565(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b);
-    void unpackRGB555(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b);
-    void unpackRGB555(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a);
-    void unpackRGB4444(uint16_t value, uint8_t& r, uint8_t& g, uint8_t& b, uint8_t& a);
+
+    template<uint8_t bits>
+    inline uint8_t remapBitsFromUI8(uint8_t value) {
+        if (bits >= 8 || bits < 1) { return value; }
+        static constexpr uint8_t BIT_MASK = (1 << bits) - 1;
+
+        static uint8_t TABLE[256]{ 0xFF };
+        if (TABLE[0] == 0xFF) {
+            for (size_t i = 0; i < 256; i++) {
+                TABLE[i] = uint8_t(std::roundf(i / 255.0f * float(BIT_MASK)));
+            }
+        }
+        return TABLE[value];
+    }
 
     constexpr uint8_t multUI8(uint32_t a, uint32_t b) {
         return uint8_t((a * b * 0x10101U + 0x800000U) >> 24);
@@ -275,10 +154,7 @@ namespace JCore {
         return lum > min && lum < max;
     }
 
-
-
     inline bool getThresholdRGB(uint8_t r, uint8_t g, uint8_t b, int32_t minR, int32_t maxR, int32_t minG, int32_t maxG, int32_t minB, int32_t maxB) {
-
         return (r >= minR && r <= maxR) && (g >= minG && g <= maxG) && (b >= minB && b <= maxB);
     }
 
@@ -292,7 +168,6 @@ namespace JCore {
         return (std::abs(P(a.r) - bR) + std::abs(P(a.g) - bG) + std::abs(P(a.b) - bB)) / P(3);
     }
 
-
     template<typename T>
     inline float channelDistanceSqrt(const T& a, float bR, float bG, float bB) {
         float r = float(a.r) - bR, g = float(a.g) - bG, b = float(a.b) - bB;
@@ -302,19 +177,18 @@ namespace JCore {
         return sqrtf((r + g + b) / 3);
     }
 
-    inline Color32 colorToAlpha(Color32 input, Color32 ref, float floor, float ceiling) {
-
- 
-
-        return input;
-    }
-
-    //GIMP's Color to Alpha
     static inline void colorToAlpha(Color32& pix, float r1, float r2, float r3, float mA, float mX) { 
         static constexpr float BYTE_TO_FLOAT = 1.0f / 255.0f;
-        float rgba[4]{ pix.r * BYTE_TO_FLOAT, pix.g * BYTE_TO_FLOAT, pix.b * BYTE_TO_FLOAT, pix.a };
-        float cOut[4]{ 0 };
-        float dist = std::max<float>(std::max<float>(std::abs(rgba[0] - r1), std::abs(rgba[1] - r2)), std::abs(rgba[2] - r3));
+        float rgba[4] { 
+            float(pix.r) * BYTE_TO_FLOAT, 
+            float(pix.g) * BYTE_TO_FLOAT, 
+            float(pix.b) * BYTE_TO_FLOAT, 
+            float(pix.a) 
+        };
+        float cOut[4] { 
+            0, 0, 0, 0
+        };
+        float dist = Math::max<float>(Math::max<float>(Math::abs(rgba[0] - r1), Math::abs(rgba[1] - r2)), Math::abs(rgba[2] - r3));
 
         if (dist <= mA) {
             pix.a = 0;
@@ -326,7 +200,7 @@ namespace JCore {
         }
 
         float tDiff = mX - mA;
-        float alpha = std::clamp((dist - tDiff) / tDiff, 0.0f, 1.0f);
+        float alpha = Math::clamp((dist - tDiff) / tDiff, 0.0f, 1.0f);
 
         float oProp = (dist / mX);
         pix.r = uint8_t(((rgba[0] - r1) / oProp + r1) * 255.0f);
@@ -337,23 +211,23 @@ namespace JCore {
 
     static inline void colorToAlpha(float& pA, float& p1, float& p2, float& p3, float r1, float r2, float r3, float mA = 1, float mX = 1) {
         float aA, a1, a2, a3;
-        // a1 calculation: minimal alpha giving r1 from p1
+
         if (p1 > r1) a1 = mA * (p1 - r1) / (mX - r1);
         else if (p1 < r1) a1 = mA * (r1 - p1) / r1;
         else a1 = 0.0f;
-        // a2 calculation: minimal alpha giving r2 from p2
+
         if (p2 > r2) a2 = mA * (p2 - r2) / (mX - r2);
         else if (p2 < r2) a2 = mA * (r2 - p2) / r2;
         else a2 = 0.0f;
-        // a3 calculation: minimal alpha giving r3 from p3
+
         if (p3 > r3) a3 = mA * (p3 - r3) / (mX - r3);
         else if (p3 < r3) a3 = mA * (r3 - p3) / r3;
         else a3 = 0.0f;
-        // aA calculation: max(a1, a2, a3)
+ 
         aA = a1;
         if (a2 > aA) aA = a2;
         if (a3 > aA) aA = a3;
-        // apply aA to pixel:
+
         if (aA >= mA / mX) {
             pA = aA * pA / mA;
             p1 = mA * (p1 - r1) / aA + r1;
@@ -369,7 +243,7 @@ namespace JCore {
     }
 
     inline uint8_t lerpUI8(uint8_t lhs, uint8_t rhs, uint8_t t) {
-        return std::clamp<int32_t>(int32_t(multUI8((255 - t), lhs)) + int32_t(multUI8(rhs, t)), 0, 255);
+        return Math::clamp<int32_t>(int32_t(multUI8((255 - t), lhs)) + int32_t(multUI8(rhs, t)), 0, 255);
     }
 
     inline Color32 lerp(Color32 lhs, Color32 rhs, float t) {
@@ -397,34 +271,6 @@ namespace JCore {
         return 1.0f;
     }
 
-   /* inline Color32 colorToAlpha(Color32 pix, Color32 ref, uint8_t maxA = 0xFF, uint8_t maxCha = 0xFF) {
-        if (ref.a < 1 || pix.a < 1) { return pix; }
-
-        int32_t r = 0, g = 0, b = 0, a = 0;
-
-        if (pix.r > ref.r) { r = multUI8(maxA, divUI8((pix.r - ref.r), maxCha < pix.r ? 0x00 : (maxCha - pix.r))); }
-        else if (ref.r > pix.r) { r = divUI8(multUI8(maxCha, (ref.r - pix.r)), ref.r); }
-
-        if (pix.g > ref.g) { g = multUI8(maxA, divUI8((pix.g - ref.g), maxCha < pix.g ? 0x00 : (maxCha - pix.g))); }
-        else if (ref.g > pix.g) { g = divUI8(multUI8(maxCha, (ref.g - pix.g)), ref.g); }
-
-        if (pix.b > ref.b) { b = multUI8(maxA, divUI8((pix.b - ref.b), maxCha < pix.b ? 0x00 : (maxCha - pix.b))); }
-        else if (ref.b > pix.b) { b = divUI8(multUI8(maxCha, (ref.b - pix.b)), ref.b); }
-
-        a = r;
-        if (g > a) { a = g; }
-        if (b > a) { a = b; }
-
-        if (a >= divUI8(maxA, maxCha)) {
-            return Color32(
-                divUI8(multUI8(maxA, (pix.r - ref.r)), a) + ref.r,
-                divUI8(multUI8(maxA, (pix.g - ref.g)), a) + ref.g,
-                divUI8(multUI8(maxA, (pix.b - ref.b)), a) + ref.b,
-                divUI8(multUI8(a, pix.a), maxA));
-        }
-        return Color32::Clear;
-    }
-    */
     inline Color32& blendUI8(Color32& lhs, Color32 rhs) {
         if (lhs.a == 0) {
             lhs = rhs;
@@ -553,6 +399,7 @@ namespace JCore {
 
     enum : uint8_t {
         IMG_FLAG_HAS_ALPHA = 0x1,
+        IMG_FLAG_ALIGNED = 0x80,
     };
 
     struct ImageData {
@@ -562,44 +409,102 @@ namespace JCore {
         TextureFormat format{ TextureFormat::Unknown };
         int32_t paletteSize{ 0 };
         uint8_t* data{ nullptr };
-        uint8_t flags{0};
+        uint8_t flags{ 0 };
 
-        ImageData() : width(), height(), format(), paletteSize(), data(), flags() {}
-        ImageData(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize, uint8_t* data, uint8_t flags) : 
+        constexpr ImageData() : width(), height(), format(), paletteSize(), data(), flags() {}
+        constexpr ImageData(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize, uint8_t* data, uint8_t flags) :
             width(width), height(height), format(format), paletteSize(paletteSize), data(data), flags(flags) {}
 
-        ImageData(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize, uint8_t* data) : 
+        constexpr ImageData(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize, uint8_t* data) :
             width(width), height(height), format(format), paletteSize(paletteSize), data(data), flags(0) {}
 
-        bool isIndexed() const { return format >= TextureFormat::Indexed8 && format <= TextureFormat::Indexed16; }
-        bool hasAlpha() const {
+        constexpr bool isIndexed() const { return format >= TextureFormat::Indexed8 && format <= TextureFormat::Indexed16; }
+        constexpr bool isAligned() const { return (flags & IMG_FLAG_ALIGNED) != 0; }
+        constexpr size_t getPaletteOffset() const { return getPaletteOffset(format, paletteSize, isAligned()); }
+
+        constexpr uint8_t* getData() const { return data + getPaletteOffset(); }
+        uint8_t* getData() { return data + getPaletteOffset(); }
+
+        constexpr uint8_t* getStart() const { return data; }
+        uint8_t* getStart() { return data; }
+
+        constexpr uint8_t* getFramedData(size_t index) const {
+            return (data + getPaletteOffset()) + (index * getSize());
+        }
+        uint8_t* getFramedData(size_t index) {
+            return (data + getPaletteOffset()) + (index * getSize());
+        }
+
+        constexpr uint8_t* getFramedStart(size_t index) const {
+            return data + (index * getSize());
+        }
+        uint8_t* getFramedStart(size_t index) {
+            return data + (index * getSize());
+        }
+
+        constexpr uint8_t* getFramedStart(size_t index, size_t frameSize) const {
+            return data + (index * frameSize);
+        }
+        uint8_t* getFramedStart(size_t index, size_t frameSize) {
+            return data + (index * frameSize);
+        }
+
+        constexpr size_t getBufferSize() const { return _bufferSize; }
+
+        ImageData getFramed(size_t frame) const {
+            if (data == nullptr) { return *this; }
+            size_t framePos = frame * getSize();
+
+            ImageData temp{};
+            temp._bufferSize = _bufferSize - framePos;
+            temp.data = data + framePos;
+            temp.paletteSize = paletteSize;
+            temp.format = format;
+            temp.width = width;
+            temp.height = height;
+            temp.flags = flags;
+            return temp;
+        }
+
+        constexpr size_t getSize() const {
+            return calculateSize(width, height, format, paletteSize, (this->flags & IMG_FLAG_ALIGNED) != 0);
+        }
+
+        bool isEqual(const ImageData& img) const {
+            if (this == &img) { return true; }
+            bool indexed = isIndexed();
+            if (_bufferSize != img._bufferSize ||
+                width != img.width || height != img.height ||
+                format != img.format || indexed != img.isIndexed() || (indexed && paletteSize != img.paletteSize)) {
+                return false;
+            }
+            return memcmp(data, img.data, _bufferSize) == 0;
+        }
+
+        static constexpr bool isIndexed(TextureFormat format) {
             switch (format) {
-                default: return false;
-
-                case TextureFormat::Indexed8:
-                case TextureFormat::Indexed16:
-                case TextureFormat::RGBA4444:
-                case TextureFormat::RGBA32:
-                case TextureFormat::RGBA64:
-                    return true;
+            case TextureFormat::Indexed8:
+            case TextureFormat::Indexed16: return true;
+            default: return false;
             }
         }
 
-        const uint8_t* getData() const {
-            return isIndexed() ? data + (paletteSize * 4) : data;
-        }
-
-        uint8_t* getData() {
-            return isIndexed() ? data + (paletteSize * 4) : data;
-        }
-
-        size_t getSize() const {
-            size_t required = width * height;
-            required *= (getBitsPerPixel(format) >> 3);
-            if (isIndexed()) {
-                required += paletteSize * sizeof(Color32);
+        static constexpr int32_t getPaletteSize(TextureFormat format, int32_t rawPaletteSize, bool align) {
+            switch (format) {
+            case TextureFormat::Indexed8:
+                return align ? 256 : Math::clamp(rawPaletteSize, 0, 256);
+            case TextureFormat::Indexed16:
+                return align ? Math::alignToPalette(rawPaletteSize) : Math::clamp(rawPaletteSize, 0, 256 * 256);
+            default: return 0;
             }
-            return required;
+        }
+
+        static constexpr size_t calculateSize(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize, bool alignedPalette) {
+            return (size_t(width) * height) * (getBitsPerPixel(format) >> 3) + (getPaletteSize(format, paletteSize, alignedPalette) * sizeof(Color32));
+        }
+
+        static constexpr size_t getPaletteOffset(TextureFormat format, int32_t paletteSize, bool alignedPalette) {
+            return getPaletteSize(format, paletteSize, alignedPalette) * sizeof(Color32);
         }
 
         bool doAllocate() {
@@ -623,15 +528,14 @@ namespace JCore {
         }
 
         bool doAllocate(size_t size, bool clear = true) {
-
             size_t required = size;
             if (data) {
-                if (required <= _bufferSize) 
-                { 
+                if (required <= _bufferSize)
+                {
                     if (clear) {
                         memset(data, 0, size);
                     }
-                    return true; 
+                    return true;
                 }
 
                 void* reloc = realloc(data, required);
@@ -651,12 +555,23 @@ namespace JCore {
             return data != nullptr;
         }
 
-        void resize(int32_t newWidth, int32_t newHeight, uint8_t* buffer = nullptr);
+        bool doAllocate(int32_t width, int32_t height, TextureFormat format, int32_t paletteSize = 0, bool alignedPalette = false, uint32_t frames = 1, bool modify = true, bool clear = true) {
+            if (modify) {
+                this->width = width;
+                this->height = height;
+                this->format = format;
+                this->flags = alignedPalette ? (this->flags | IMG_FLAG_ALIGNED) : (this->flags & ~IMG_FLAG_ALIGNED);
+                this->paletteSize = getPaletteSize(format, paletteSize, alignedPalette);
+            }
+            return doAllocate(calculateSize(width, height, format, paletteSize, alignedPalette) * frames);
+        }
+
+        void resize(int32_t newWidth, int32_t newHeight, bool linear, ImageData* tempBuffer = nullptr);
 
         void replaceData(uint8_t* newData, bool destroy);
         void clear(bool destroy);
     private:
-        size_t _bufferSize{0};
+        size_t _bufferSize{ 0 };
     };
 
     struct ImageBuffers {

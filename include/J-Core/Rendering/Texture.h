@@ -74,7 +74,6 @@ namespace JCore {
     void waitForTexGen(int32_t index, size_t sleepFor = 100);
     bool shouldWaitForTexGen(int32_t index);
 
-
     template<size_t count>
     void waitForTexGen(int32_t(&indices)[count], size_t sleepFor = 100) {
         while (true) {

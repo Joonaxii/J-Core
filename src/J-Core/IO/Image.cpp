@@ -5,7 +5,7 @@
 #include <J-Core/Math/Color4444.h>
 #include <J-Core/Math/Color32.h>
 #include <J-Core/Math/Math.h>
-#include <J-Core/Util/DataUtilities.h>
+#include <J-Core/Util/DataUtils.h>
 #include <J-Core/Util/Span.h>
 #include <J-Core/IO/FileStream.h>
 #include <J-Core/IO/ZLib.h>
@@ -13,11 +13,16 @@
 #include <J-Core/Rendering/Texture.h>
 
 namespace JCore {
-    int32_t calcualtePadding(const int32_t width, const int32_t bpp) {
-        const int32_t rem = (width * bpp) & 0x3;
+    static inline constexpr int32_t getPaddedWidth(int32_t width, int32_t bpp) {
+        return ((width * bpp + 31) / 32) * 4;
+    }
+
+    static inline constexpr int32_t calcualtePadding(int32_t width, int32_t bpp) {
+        int32_t rem = (width * bpp) & 0x3;
         return rem ? 4 - rem : 0;
     }
-    void flipRB(uint8_t* data, const int32_t width, const int32_t bpp) {
+
+    static void flipRB(uint8_t* data,  int32_t width, int32_t bpp) {
         switch (bpp)
         {
             default: return;
@@ -60,7 +65,7 @@ namespace JCore {
             int32_t numOfColors;
         };
 #pragma pack(pop, 1)
-        bool getInfo(const char* path, ImageData& imgData) {
+        bool getInfo(std::string_view path, ImageData& imgData) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -133,7 +138,7 @@ namespace JCore {
         }
 
 
-        bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+        bool decode(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -293,7 +298,7 @@ namespace JCore {
             return true;
         }
 
-        bool encode(const char* path, const ImageData& imgData, uint32_t dpi) {
+        bool encode(std::string_view path, const ImageData& imgData, uint32_t dpi) {
             FileStream fs(path);
             if (fs.open("wb")) {
                 return encode(fs, imgData, dpi);
@@ -544,7 +549,7 @@ namespace JCore {
             return true;
         }
 
-        bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+        bool decode(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream stream(path, "rb");
             if (stream.isOpen()) {
                 return decode(stream, imgData, params);
@@ -786,7 +791,7 @@ namespace JCore {
             return true;
         }
 
-        bool getInfo(const char* path, ImageData& imgData) {
+        bool getInfo(std::string_view path, ImageData& imgData) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -870,7 +875,7 @@ namespace JCore {
             stream.writeValue(crc, 1, true);
         }
 
-        bool encode(const char* path, const ImageData& imgData, const uint32_t compression) {
+        bool encode(std::string_view path, const ImageData& imgData, const uint32_t compression) {
             FileStream fs(path);
             if (fs.open("wb")) {
                 return encode(fs, imgData, compression);
@@ -1153,7 +1158,7 @@ namespace JCore {
         }
 
 
-        bool decodeDxt1(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+        bool decodeDxt1(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream fs(path);
             if (fs.open("rb")) {
                 return decodeDxt1(fs, imgData);
@@ -1289,7 +1294,7 @@ namespace JCore {
         }
 
 
-        bool decodeDxt5(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+        bool decodeDxt5(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream fs(path);
             if (fs.open("rb")) {
                 return decodeDxt5(fs, imgData);
@@ -1347,7 +1352,7 @@ namespace JCore {
         };
 #pragma pack(pop, 1)
 
-        bool getInfo(const char* path, ImageData& imgData) {
+        bool getInfo(std::string_view path, ImageData& imgData) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -1418,7 +1423,7 @@ namespace JCore {
             return true;
         }
 
-        bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+        bool decode(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -1567,7 +1572,7 @@ namespace JCore {
             return true;
         }
 
-        bool encode(const char* path, const ImageData& imgData) {
+        bool encode(std::string_view path, const ImageData& imgData) {
             FileStream fs(path);
             if (fs.open("wb")) {
                 return encode(fs, imgData);
@@ -1701,6 +1706,120 @@ namespace JCore {
         }
     }
 
+    namespace ICO {
+        struct ICOHeader {
+            uint16_t reserved{};
+            uint16_t type{};
+            uint16_t resDirs{};
+        };
+        struct ICORes {
+            uint8_t width{};
+            uint8_t height{};
+            uint8_t palSize{};
+            uint8_t reserved{};
+            uint16_t planes{};
+            uint16_t bpp{};
+            uint32_t size{};
+            uint16_t offset{};
+        };
+
+        bool getInfo(std::string_view path, ImageData& imgData) {
+            FileStream stream(path, "rb");
+            if (stream.isOpen()) {
+                return getInfo(stream, imgData);
+            }
+            JCORE_ERROR("[Image-IO] (ICO) Decode Error: Failed to open '{0}'!", path);
+            return false;
+        }
+        bool getInfo(const Stream& stream, ImageData& imgData) {
+            return false;
+        }
+
+        bool decode(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
+            FileStream stream(path, "rb");
+            if (stream.isOpen()) {
+                return decode(stream, imgData, params);
+            }
+            JCORE_ERROR("[Image-IO] (ICO) Decode Error: Failed to open '{0}'!", path);
+            return false;
+        }
+        bool decode(const Stream& stream, ImageData& imgData, const ImageDecodeParams params) {
+            size_t ogStart = stream.tell();
+            ICOHeader ico{};
+            stream.readValue(ico, false);
+
+            if (ico.reserved != 0 && ico.type != 1) {
+                JCORE_ERROR("[Image-IO] (ICO) Decode Error: Not an ICO file or is corrupted!");
+                return false;
+            }   
+
+            if (ico.resDirs > 0) {
+                JCORE_ERROR("[Image-IO] (ICO) Decode Error: No icon resources!");
+                return false;
+            }
+            ICORes* res = reinterpret_cast<ICORes*>(_malloca(sizeof(ICORes) * ico.resDirs));
+            if (!res) {
+                JCORE_ERROR("[Image-IO] (ICO) Decode Error: Failed to allocate res dirs!");
+                return false;
+            }
+            stream.read(res, sizeof(ICORes) * ico.resDirs, false);
+
+            int32_t largestRes = 0;
+            ICORes* largest = res;
+            for (size_t i = 0; i < ico.resDirs; i++) {
+                auto& rIco = res[i];
+                if (rIco.width < 1 || rIco.height < 0) {
+                    stream.seek(ogStart + rIco.offset, SEEK_SET);
+                    if (Png::getInfo(stream, imgData)) {
+                        int32_t reso = imgData.width * imgData.height;
+                        if (reso > largestRes) {
+                            largestRes = reso;
+                            largest = res + i;
+                        }
+                    }
+                }
+                else {
+                    int32_t reso = rIco.width * rIco.height;
+                    if (reso > largestRes) {
+                        largestRes = reso;
+                        largest = res + i;
+                    }
+                }
+            }
+
+            stream.seek(ogStart + largest->offset, SEEK_SET);
+            bool ret = false;
+            if (largest->width == 0 || largest->height == 0) {
+                ret = Png::decode(stream, imgData);
+            }
+            else {
+                ret = Bmp::decode(stream, imgData);
+            }
+
+            largest = res + (ico.resDirs - 1);
+            stream.seek(ogStart + largest->offset + largest->size, SEEK_SET);
+            return ret;
+        }
+
+        bool encode(std::string_view path, const ImageData& imgData, bool compressed) {
+            FileStream stream(path, "rb");
+            if (stream.isOpen()) {
+                return encode(stream, imgData, compressed);
+            }
+            JCORE_ERROR("[Image-IO] (ICO) Encode Error: Failed to open '{0}'!", path);
+            return false;
+        }
+
+        bool encode(const Stream& stream, const ImageData& imgData, bool compressed) {
+            return false;
+        }
+
+        static size_t calculateMaxIcoSize(const ImageData& icon) {
+            return 40ULL + ((size_t(icon.width) * icon.height * 4) +  (size_t(icon.height) * getPaddedWidth(icon.width, 1)));
+        }
+    }
+
+
     namespace JTEX {
         static constexpr uint32_t JTEX_SIG = 0x5845544AU;
         enum JTEXFlags : uint32_t {
@@ -1708,7 +1827,7 @@ namespace JCore {
             JTEX_Compressed = 0x1,
         };
 
-        bool getInfo(const char* path, ImageData& imgData) {
+        bool getInfo(std::string_view path, ImageData& imgData) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -1753,7 +1872,7 @@ namespace JCore {
             return true;
         }
 
-        bool decode(const char* path, ImageData& imgData, const ImageDecodeParams params) {
+        bool decode(std::string_view path, ImageData& imgData, const ImageDecodeParams params) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
@@ -1777,7 +1896,7 @@ namespace JCore {
             return true;
         }
 
-        bool encode(const char* path, const ImageData& imgData) {
+        bool encode(std::string_view path, const ImageData& imgData) {
             FileStream fs(path);
             if (fs.open("wb")) {
                 return encode(fs, imgData);
@@ -1805,13 +1924,16 @@ namespace JCore {
     }
 
     namespace Image {
-        bool tryGetInfo(const char* path, ImageData& imgData, DataFormat& format) {
+        bool tryGetInfo(std::string_view path, ImageData& imgData, DataFormat& format) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
-                return tryGetInfo(stream, imgData, format);
+                if (tryGetInfo(stream, imgData, format)) {
+                    return true;
+                }
+                JCORE_ERROR("[Image-IO] Error: Failed to get info for '{0}'!", path);
+                return false;;
             }
-
             JCORE_ERROR("[Image-IO] Error: Failed to open '{0}'!", path);
             return false;
         }
@@ -1836,11 +1958,15 @@ namespace JCore {
             }
         }
 
-        bool tryDecode(const char* path, ImageData& imgData, DataFormat& format, const ImageDecodeParams params) {
+        bool tryDecode(std::string_view path, ImageData& imgData, DataFormat& format, const ImageDecodeParams params) {
             FileStream stream(path, "rb");
 
             if (stream.isOpen()) {
-                return tryDecode(stream, imgData, format, params);
+                if (tryDecode(stream, imgData, format, params)) {
+                    return true;
+                }
+                JCORE_ERROR("[Image-IO] Error: Failed to decode '{0}'!", path);
+                return false;;
             }
 
             JCORE_ERROR("[Image-IO] Error: Failed to open '{0}'!", path);
@@ -1870,7 +1996,7 @@ namespace JCore {
             }
         }
 
-        bool tryEncode(const char* path, const ImageData& imgData, DataFormat format, const ImageEncodeParams& encodeParams) {
+        bool tryEncode(std::string_view path, const ImageData& imgData, DataFormat format, const ImageEncodeParams& encodeParams) {
             FileStream fs(path);
             if (fs.open("wb")) {
                 return tryEncode(fs, imgData, format, encodeParams);

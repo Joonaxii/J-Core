@@ -21,7 +21,7 @@ namespace JCore {
 
     class Application : public IGui {
     public:
-        Application(const AppSpecs specs);
+        Application(const AppSpecs& specs);
         virtual ~Application();
 
         bool initialize();
@@ -29,11 +29,11 @@ namespace JCore {
         void run();
         void close();
 
-        void initFont(const wchar_t* charset, const char* fontpath);
-        void initFont(const char* fontpath);
+        void initFont(const wchar_t* charset, std::string_view fontpath);
+        void initFont(std::string_view fontpath);
 
-        void toggleFont(const bool state);
-       
+        void toggleFont(bool state);
+
     protected:
         static Application* _instance;
 
@@ -44,6 +44,10 @@ namespace JCore {
 
         std::vector<ImGuiStyle> _styles;
 
+        bool tryQuit();
+        bool isQuitting() const;
+        bool canQuit() const;
+
         virtual void start() {}
         virtual void stop(){}
 
@@ -51,7 +55,11 @@ namespace JCore {
         virtual void setupStyles(ImGuiStyle& defStyle);
 
         void setStyle(const int32_t index);
+
+        virtual int32_t getIconID() const { return 101; }
+
     private:
+        bool _quitting{};
         void setupStyles();
     };
     Application* createApplication(AppArgs args);

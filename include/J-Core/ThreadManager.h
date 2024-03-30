@@ -2,16 +2,20 @@
 #include <cstdint>
 #include <thread>
 #include <atomic>
+#include <type_traits>
 #include <functional>
 #include <J-Core/Rendering/Window.h>
 #include <cstdarg>
 #include <J-Core/Util/EnumUtils.h>
+#include <J-Core/Util/StringUtils.h>
+#include <J-Core/Rendering/Texture.h>
 
 namespace JCore {
     enum : uint32_t {
         THREAD_FLAG_CANCEL = 0x1,
         THREAD_FLAG_RUNNING = 0x2,
         THREAD_FLAG_DONE = 0x4,
+        THREAD_FLAG_SKIP = 0x8,
 
         THREAD_FLAG_STATE_MASK = 0xF,
 
@@ -26,6 +30,7 @@ namespace JCore {
         TASK_COPY_SUBPROGRESS = 0x10,
         TASK_COPY_FLAGS = 0x20,
         TASK_COPY_TARGET_PROGRESS = 0x20,
+        TASK_COPY_PREVIEW = 0x40,
     };
     enum TaskProgressType : uint8_t {
         PROG_ValueFloat,
@@ -141,36 +146,30 @@ namespace JCore {
 
         enum : uint8_t {
             HAS_SUB_TASK = 0x1,
-            HAS_SUB_RELATIVE = 0x2,
+            HAS_SUB_RELATIVE = 0x2
         };
 
-        char title[48]{ 0 };
-        char message[48]{ 0 };
-        char subMessage[96]{ 0 };
+        std::string title{};
+        std::string message{};
+        std::string subMessage{};
         ProgressValue progress{};
         ProgressValue targetProg{};
         ProgressValue subProgress{};
+
+        ImageData* preview{};
         uint8_t flags{ 0 };
 
-        TaskProgress() : title{ 0 }, message{ 0 }, subMessage{ 0 }, progress(), subProgress(), flags(0), targetProg() {}
+        TaskProgress() : title{ }, message{ }, subMessage{ }, progress(), subProgress(), flags(0), targetProg(), preview{} {}
 
-        TaskProgress(const char* title, const char* message) {
-            size_t len = std::min<size_t>(strlen(title), 63);
-            memcpy(this->title, title, len);
-
-            len = std::min<size_t>(strlen(message), 63);
-            memcpy(this->message, message, len);
+        TaskProgress(const char* title, const char* message) : TaskProgress(){
+            this->title = std::string{ title };
+            this->message = std::string{ message };
         }
 
-        TaskProgress(const char* title, const char* message, const char* subMessage) {
-            size_t len = std::min<size_t>(strlen(title), 63);
-            memcpy(this->title, title, len);
-
-            len = std::min<size_t>(strlen(message), 63);
-            memcpy(this->message, message, len);
-
-            len = std::min<size_t>(strlen(subMessage), 63);
-            memcpy(this->subMessage, subMessage, len);
+        TaskProgress(const char* title, const char* message, const char* subMessage) : TaskProgress() {
+            this->title = std::string{ title };
+            this->message = std::string{ message };
+            this->subMessage = std::string{ subMessage };
         }
 
         float getProgress() const {
@@ -180,38 +179,42 @@ namespace JCore {
             return progress.getNormalized();
         }
 
-        void setSubMessage(const char* fmt, ...) {
-            va_list args;
-            va_start(args, fmt);
-            vsprintf_s(subMessage, fmt, args);
-            va_end(args);
+        template <class Arg>
+        static decltype(auto) prepare(const Arg& arg)
+        {
+            if constexpr (std::is_same_v<Arg, std::string>) { return arg.c_str(); }
+            return arg;
         }
 
-        void setMessage(const char* fmt, ...) {
-            va_list args;
-            va_start(args, fmt);
-            vsprintf_s(message, fmt, args);
-            va_end(args);
+        template<typename ...Args>
+        void setSubMessage(const char* format, Args... args) {
+            subMessage.clear();
+            Utils::appendFormat(subMessage, format, args...);
         }
 
-        void setTitle(const char* fmt, ...) {
-            va_list args;
-            va_start(args, fmt);
-            vsprintf_s(title, fmt, args);
-            va_end(args);
+        template<typename ...Args>
+        void setMessage(const char* format, Args... args) {
+            message.clear();
+            Utils::appendFormat(message, format, args...);
+        }
+
+        template<typename ...Args>
+        void setTitle(const char* format, Args... args) {
+            title.clear();
+            Utils::appendFormat(title, format, args...);
         }
 
         void copyFrom(const TaskProgress& other, uint8_t copyFlags) {
             if (copyFlags & TASK_COPY_TITLE) {
-                memcpy(title, other.title, sizeof(title));
+                title = other.title;
             }
 
             if (copyFlags & TASK_COPY_MESSAGE) {
-                memcpy(message, other.message, sizeof(message));
+                message = other.message;
             }
 
             if (copyFlags & TASK_COPY_SUBMESSAGE) {
-                memcpy(subMessage, other.subMessage, sizeof(subMessage));
+                subMessage = other.subMessage;
             }
 
             if (copyFlags & TASK_COPY_SUBPROGRESS) {
@@ -228,6 +231,10 @@ namespace JCore {
 
             if (copyFlags & TASK_COPY_FLAGS) {
                 flags = other.flags;
+            }
+
+            if (copyFlags & TASK_COPY_PREVIEW) {
+                preview = other.preview;
             }
         }
 
@@ -246,6 +253,9 @@ namespace JCore {
     public:
         uint32_t flags{ 0 };
         TaskProgress progress{};
+        bool showPreview{};
+        std::shared_ptr<Texture> previewTex = std::make_shared<Texture>();
+
         ~Task() {
             if (_thread.joinable()) {
                 _thread.join();
@@ -274,9 +284,16 @@ namespace JCore {
         bool beginTask(std::function<void(void)> method, std::function<void(void)> onComplete);
         bool cancelCurTask();
 
+        bool isCancelling();
+
+        bool markForSkip();
+        bool performSkip();
+        bool isSkipping();
+
+        void clearPreview();
         void updateTask();
 
-        void reportProgress(const TaskProgress& progress, uint8_t copyFlags = 0xFF);
+        void reportProgress(const TaskProgress& progress, uint8_t copyFlags = (0xFF & ~TASK_COPY_PREVIEW));
         const Task& getCurrentTask();
     }
 }

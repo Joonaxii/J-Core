@@ -84,7 +84,7 @@ namespace JCore {
         Renderer();
         ~Renderer();
 
-        bool initialize(const char* title, uint32_t width = 1280, uint32_t height = 720);
+        bool initialize(const char* title, uint32_t width = 1280, uint32_t height = 720, int32_t icon = 101);
         void release();
 
         bool update();

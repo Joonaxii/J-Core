@@ -19,6 +19,33 @@ namespace JCore {
         const TaskProgress& getProgress() { return PROGRESS; }
         bool isDirty() { return PROGRESS_DIRTY.load(); }
 
+        bool isSkipping() {
+            return CURRENT_TASK.isRunning() && (CURRENT_TASK.flags & THREAD_FLAG_SKIP) != 0;
+        }
+
+        bool markForSkip() {
+            if (CURRENT_TASK.isRunning()) {
+                if (!PROGRESS_MUTEX.try_lock()) { return false; }
+                CURRENT_TASK.flags |= THREAD_FLAG_SKIP;
+                PROGRESS_MUTEX.unlock();
+                return true;
+            }
+            return false;
+        }
+        bool performSkip() {
+            if (CURRENT_TASK.isRunning() && (CURRENT_TASK.flags & THREAD_FLAG_SKIP)) {
+                if (!PROGRESS_MUTEX.try_lock()) { return false; }
+                CURRENT_TASK.flags &= ~THREAD_FLAG_SKIP;
+                PROGRESS_MUTEX.unlock();
+                return true;
+            }
+            return false;
+        }
+
+        void clearPreview() {
+            CURRENT_TASK.showPreview = false;
+        }
+
         void markProgressNotDirty() {
             PROGRESS_DIRTY.store(false);
         }
@@ -35,12 +62,17 @@ namespace JCore {
             return true;
         }
 
+        bool isCancelling() {
+            return CURRENT_TASK.isRunning() && (CURRENT_TASK.flags & THREAD_FLAG_CANCEL);
+        }
+
         bool cancelCurTask()  {
             if (!CURRENT_TASK.isRunning()) {
                 JCORE_WARN("[J-Core - TaskManager] No task in progress, didn't cancel anything.");
                 return false;
             }
             CURRENT_TASK.cancel();
+            clearPreview();
             return true;
         }
 
@@ -51,6 +83,16 @@ namespace JCore {
                 if (ON_COMPLETE) {
                     ON_COMPLETE();
                     ON_COMPLETE = nullptr;
+                }
+            }
+            else if (CURRENT_TASK.flags & THREAD_FLAG_RUNNING) {
+                if (PROGRESS_MUTEX.try_lock()) {
+                    if (PROGRESS.preview) {
+                        auto prevIm = PROGRESS.preview;
+                        CURRENT_TASK.showPreview = CURRENT_TASK.previewTex->create(prevIm->data, prevIm->format, prevIm->paletteSize, prevIm->width, prevIm->height, prevIm->flags);
+                        PROGRESS.preview = nullptr;
+                    }
+                    PROGRESS_MUTEX.unlock();
                 }
             }
         }
@@ -67,6 +109,7 @@ namespace JCore {
 
     void Task::run(std::function<void(void)> method, bool requireOpenGL) {
         join();
+        showPreview = false;
 
         flags = THREAD_FLAG_RUNNING | (requireOpenGL ? THREAD_FLAG_OPENGL : 0);
         initAndRun(method);
@@ -74,9 +117,7 @@ namespace JCore {
 
     void Task::cancel() {
         if ((flags & THREAD_FLAG_CANCEL) != 0) { return; }
-        flags = (flags & ~THREAD_FLAG_STATE_MASK) | THREAD_FLAG_CANCEL;
-        _thread.join();
-        flags = 0;
+        flags |= THREAD_FLAG_CANCEL;
     }
 
     void Task::join()  {
@@ -88,7 +129,7 @@ namespace JCore {
     void Task::initAndRun(std::function<void(void)> method) {
         _thread = std::thread([this, method]() {
             method();
-            flags = (flags & ~THREAD_FLAG_RUNNING) | THREAD_FLAG_DONE;
+            flags = (flags & ~(THREAD_FLAG_RUNNING | THREAD_FLAG_CANCEL | THREAD_FLAG_SKIP)) | THREAD_FLAG_DONE;
             });
     }
 }

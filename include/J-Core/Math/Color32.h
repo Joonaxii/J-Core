@@ -7,6 +7,7 @@ namespace JCore {
     struct Color555;
     struct Color565;
     struct Color4444;
+    struct Color8887;
     struct Color32 {
         static const Color32 White;
         static const Color32 Black;
@@ -25,14 +26,15 @@ namespace JCore {
         uint8_t a;
 
         inline constexpr Color32() :r(), g(),b(),a() {}
-        inline constexpr Color32(const uint32_t rgba) : r(rgba & 0xFF), b((rgba >> 8) & 0xFF), g((rgba >> 16) & 0xFF), a((rgba >> 24) & 0xFF) { }
-        inline constexpr Color32(const uint8_t gray) : r(gray), g(gray), b(gray), a(0xFF) { }
-        inline constexpr Color32(const uint8_t r, const uint8_t g, const uint8_t b) : r(r), g(g), b(b), a(0xFF) { }
-        inline constexpr Color32(const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t a) : r(r), g(g), b(b), a(a) { }
+        inline constexpr Color32(uint32_t rgba) : r(rgba & 0xFF), b((rgba >> 8) & 0xFF), g((rgba >> 16) & 0xFF), a((rgba >> 24) & 0xFF) { }
+        inline constexpr Color32(uint8_t gray) : r(gray), g(gray), b(gray), a(0xFF) { }
+        inline constexpr Color32(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b), a(0xFF) { }
+        inline constexpr Color32(uint8_t r, uint8_t g, uint8_t b, uint8_t a) : r(r), g(g), b(b), a(a) { }
 
         Color32(const Color24& rgb);
         Color32(const Color24& rgb, const uint8_t alpha);
 
+        Color32(const Color8887& rgba);
         Color32(const Color555& rgb);
         Color32(const Color555& rgb, const uint8_t alpha);
         Color32(const Color565& rgb);
@@ -63,6 +65,27 @@ namespace JCore {
         bool operator>(const Color24& other) const;
 
         void flipRB();
+    };
+
+    struct Color32;
+    struct Color8887 {
+        uint8_t r;
+        uint8_t g;
+        uint8_t b;
+        uint8_t a;
+
+        constexpr Color8887() : r(0), g(0), b(0), a(0) {}
+        constexpr Color8887(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b), a(0x7F) {}
+        Color8887(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+        Color8887(const Color32& rgba);
+
+        bool operator==(const Color8887& other) const {
+            return reinterpret_cast<const uint32_t&>(*this) == reinterpret_cast<const uint32_t&>(other);
+        }
+
+        bool operator!=(const Color8887& other) const {
+            return reinterpret_cast<const uint32_t&>(*this) != reinterpret_cast<const uint32_t&>(other);
+        }
     };
 }
 

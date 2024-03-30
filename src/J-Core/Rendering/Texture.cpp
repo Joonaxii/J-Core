@@ -2,7 +2,7 @@
 #include <J-Core/Rendering/Texture.h>
 #include <J-Core/Rendering/Renderer.h>
 #include <J-Core/Math/Math.h>
-#include <J-Core/Util/DataUtilities.h>
+#include <J-Core/Util/DataUtils.h>
 
 namespace JCore {
     Texture::Texture() : _width(0), _height(0), _textureId(0), _paletteId(0), _paletteSize(0), _crcTex(0), _format(TextureFormat::Unknown) { }

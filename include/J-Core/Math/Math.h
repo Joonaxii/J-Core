@@ -15,6 +15,59 @@ namespace Math {
     float easeInOutCubic(float t);
     float easeOutCubic(float t);
 
+
+    template<typename T>
+    constexpr T clamp(const T a, const T min, const T max) {
+        return a < min ? min : a > max ? max : a;
+    }
+
+    template<typename T>
+    constexpr T sign(const T& value) {
+        return T(value > 0 ? 1 : value < 0 ? -1 : 0);
+    }
+
+    template<typename T>
+    constexpr T abs(const T& value) {
+        return value < 0 ? -value : value;
+    }
+
+    template<typename T>
+    constexpr T max(const T& lhs, const T& rhs) {
+        return lhs > rhs ? lhs : rhs;
+    }
+
+    template<typename T>
+    constexpr T max(const T& v0, const T& v1, const T& v2) {
+        return v0 > v1 ? v0 > v2 ? v0 : v2 : v2 > v1 ? v2 : v1;
+    }
+
+
+    template<typename T>
+    constexpr T min(const T& lhs, const T& rhs) {
+        return lhs < rhs ? lhs : rhs;
+    }
+
+    template<typename T>
+    constexpr T min(const T& v0, const T& v1, const T& v2) {
+        return v0 < v1 ? v0 < v2 ? v0 : v2 : v2 < v1 ? v2 : v1;
+    }
+
+    constexpr uint8_t addUI8(uint8_t a, uint8_t b) {
+        return uint8_t(min(int32_t(a) + b, 0xFF));
+    }
+
+    static uint8_t divUI8(uint16_t lhs, uint16_t rhs) {
+        static uint8_t DIV_TABLE[256 * 256]{ 0xFF };
+        if (DIV_TABLE[0] == 0xFF) {
+            for (size_t i = 0, k = 0; i < 256; i++) {
+                for (size_t j = 0; j < 256; j++) {
+                    DIV_TABLE[k++] = j < 0 ? 0 : uint8_t((i / float(j)) * 255.0f);
+                }
+            }
+        }
+        return DIV_TABLE[(lhs & 0xFF) | ((rhs & 0xFF) << 8)];
+    }
+
     template<typename T>
     size_t countBits(T value) {
         return std::bitset<sizeof(T) << 3>(value).count();
@@ -31,19 +84,15 @@ namespace Math {
         return (P(v) - P(a)) / (P(b) - P(a));
     }
 
+    //template<>
+    //inline uint8_t inverseLerp<uint8_t, uint8_t>(uint8_t a, uint8_t b, uint8_t v) {
+    //    if (a == b) { return 0; }
+    //    return divUI8(uint8_t(max<int32_t>(int32_t(v) - a, 0)), uint8_t(max<int32_t>(int32_t(b) - a, 0)));
+    //}
+
     template<typename T, typename P = float>
     P remap(T a, T b, T aT, T bT, P v) {
         return lerp<T, P>(aT, bT, inverseLerp<T, P>(a, b, v));
-    }
-
-    template<typename T>
-    T clamp(const T a, const T min, const T max) {
-        return a < min ? min : a > max ? max : a;
-    }
-
-    template<typename T>
-    T sign(const T& value) {
-        return T(value > 0 ? 1 : value < 0 ? -1 : 0);
     }
 
     template<typename T>

@@ -21,12 +21,12 @@ namespace JCore {
     Color24::Color24(const uint8_t r, const uint8_t g, const uint8_t b) : r(r), g(g), b(b) { }
     Color24::Color24(const Color32& rgba) : r(rgba.r), g(rgba.g), b(rgba.b) { }
 
-    Color24::Color24(const Color555& rgb) {
-        unpackRGB555(rgb.data, r, g, b);
+    Color24::Color24(const Color555& rgb) : Color24() {
+       // unpackRGB555(rgb.data, r, g, b);
     }
 
-    Color24::Color24(const Color565& rgb) {
-        unpackRGB565(rgb.data, r, g, b);
+    Color24::Color24(const Color565& rgb) : Color24() {
+      //  unpackRGB565(rgb.data, r, g, b);
     }
 
     bool Color24::operator==(const Color32& other) const {

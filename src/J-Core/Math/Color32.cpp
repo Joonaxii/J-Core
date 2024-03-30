@@ -21,24 +21,46 @@ namespace JCore {
     Color32::Color32(const Color24& rgb) : r(rgb.r), g(rgb.g), b(rgb.b), a(0xFF) { }
     Color32::Color32(const Color24& rgb, const uint8_t alpha) : r(rgb.r), g(rgb.g), b(rgb.b), a(alpha) { }
 
-    Color32::Color32(const Color555& rgb) {
-        unpackRGB555(rgb.data, r, g, b, a);
-    }
+    Color32::Color32(const Color555& rgb) :
+        r(remapUI8Bits<5>(rgb.data & 0x1F)),
+        g(remapUI8Bits<5>((rgb.data >> 5) & 0x3F)),
+        b(remapUI8Bits<5>((rgb.data >> 10) & 0x1F)),
+        a(remapUI8Bits<1>((rgb.data >> 15) & 0x1))
+    {  }
 
-    Color32::Color32(const Color555& rgb, const uint8_t alpha) {
-        unpackRGB555(rgb.data, r, g, b, a);
-        a = alpha;
-    }
+
+    Color32::Color32(const Color555& rgb, const uint8_t alpha) :
+        r(remapUI8Bits<5>(rgb.data & 0x1F)),
+        g(remapUI8Bits<5>((rgb.data >> 5) & 0x3F)),
+        b(remapUI8Bits<5>((rgb.data >> 10) & 0x1F)),
+        a(alpha)
+    {  }
 
     Color32::Color32(const Color565& rgb) : Color32(rgb, 0xFF) { }
-    Color32::Color32(const Color565& rgb, const uint8_t alpha) {
-        unpackRGB565(rgb.data, r, g, b);
-        a = alpha;
-    }
+    Color32::Color32(const Color565& rgb, const uint8_t alpha) :
+        r(remapUI8Bits<5>(rgb.data & 0x1F)),
+        g(remapUI8Bits<6>((rgb.data >> 5)& 0x3F)),
+        b(remapUI8Bits<5>((rgb.data >> 11) & 0x1F)),
+        a(alpha)
+    {  }
 
-    Color32::Color32(const Color4444& rgba) : Color32() {
-        unpackRGB4444(rgba.data, r, g, b, a);
-    }
+    Color32::Color32(const Color4444& rgba) : 
+        r(remapUI8Bits<4>(rgba.getR())),
+        g(remapUI8Bits<4>(rgba.getG())),
+        b(remapUI8Bits<4>(rgba.getB())),
+        a(remapUI8Bits<4>(rgba.getA()))
+    {  }
+
+    Color8887::Color8887(uint8_t r, uint8_t g, uint8_t b, uint8_t a) :
+        r(r), g(g), b(b),
+        a(remapBitsFromUI8<7>(a)) { }
+
+    Color8887::Color8887(const Color32& rgba) : Color8887(rgba.r, rgba.g, rgba.b, rgba.a) {}
+
+    Color32::Color32(const Color8887& rgba) :
+        r(rgba.r), g(rgba.g), b(rgba.b),
+        a(remapUI8Bits<7>(rgba.a)) {}
+
 
     Color32::operator Color24() const { return Color24(r, g, b); }
 
