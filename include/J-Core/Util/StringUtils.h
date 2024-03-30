@@ -149,7 +149,7 @@ namespace JCore::Utils {
             for (size_t i = 0, j = 0; i < lhs.size(); i++) {
                 if (lhs[i] == rhs[j++]) {
                     if (j >= rhs.size()) {
-                        return i - rhs.size();
+                        return i - (rhs.size() - 1);
                     }
                     continue;
                 }
@@ -186,7 +186,7 @@ namespace JCore::Utils {
             for (size_t i = 0, j = 0; i < lhs.size(); i++) {
                 if (towlower(int32_t(lhs[i])) == towlower(int32_t(rhs[j++]))) {
                     if (j >= rhs.size()) {
-                        return i - rhs.size();
+                        return i - (rhs.size() - 1);
                     }
                     continue;
                 }

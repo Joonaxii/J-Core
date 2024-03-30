@@ -155,13 +155,11 @@ namespace JCore::Gui {
         return Gui::drawDropdown<T, std::string_view, EnumInfo<T, ID>::MinValue>(label, value, EnumInfo<T, ID>::Names, T(EnumInfo<T, ID>::Count))
     }
 
-    template<typename T, size_t type = 0>
+    template<typename T, size_t type = 0, size_t nameId = type>
     bool drawEnumList(std::string_view label, T& value, bool allowSearch = false, bool ignoreNoDraw = false) {
         size_t valueI = 0;
         memcpy(&valueI, &value, Math::min(sizeof(T), sizeof(size_t)));
         bool changed = false;
-
-        changed = Enum::nextValidIndex<T, type>(valueI, ignoreNoDraw);
         const std::string_view* values = EnumInfo<T, type>::Names;
 
         static char buffer[257]{ 0 };
@@ -183,22 +181,23 @@ namespace JCore::Gui {
             ImGui::SameLine();
 
             ImGui::SetNextItemWidth(rest);
-            combo = ImGui::BeginCombo("##EnumItems", values[valueI]);
+            combo = ImGui::BeginCombo("##EnumItems", EnumInfo<T, nameId>::Names[Math::min(valueI - EnumInfo<T, nameId>::MinValue, EnumInfo<T, nameId>::Count)]);
         }
         else {
-            combo = ImGui::BeginCombo(label, values[valueI]);
+            combo = ImGui::BeginCombo(label, EnumInfo<T, nameId>::Names[Math::min(valueI - EnumInfo<T, nameId>::MinValue, EnumInfo<T, nameId>::Count)]);
         }
 
         if (combo) {
  
-            for (size_t i = 0; i < EnumInfo<T, type>::Count; i++) {
-                if (Enum::isNoDraw<T, type>(i) || (buffer[0] != 0 && (allowSearch && !Utils::strIContains(values[i], buffer)))) { continue; }
-                const bool selected = i == valueI;
+            for (size_t i = 0, j = EnumInfo<T, type>::MinValue; i < EnumInfo<T, type>::Count; i++, j++) {
+                std::string_view cur = values[i];
+                if (Utils::isWhiteSpace(cur) || (buffer[0] != 0 && (allowSearch && !Utils::strIContains(cur, buffer)))) { continue; }
+                const bool selected = j == valueI;
 
-                ImGui::PushID(i);
-                if (ImGui::Selectable(values[i], selected)) {
+                ImGui::PushID(j);
+                if (ImGui::Selectable(cur, selected)) {
                     changed = true;
-                    valueI = i;
+                    valueI = j;
                 }
                 if (selected) {
                     ImGui::SetItemDefaultFocus();

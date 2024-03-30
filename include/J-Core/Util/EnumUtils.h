@@ -17,8 +17,14 @@ namespace JCore {
         template<typename T, size_t ID, uint64_t MinValue, uint64_t Count, bool IsBitField>
         struct _Enum {
             static constexpr std::string_view getEnumName(T value, const std::string_view Names[Count]) {
-                uint64_t index = (IsBitField ? uint64_t(Math::log2(value)) : uint64_t(value)) - MinValue;
-                if (index < 0 || index >= Count) { return std::string_view{}; }
+                uint64_t index = (IsBitField ? uint64_t(Math::log2(value)) : uint64_t(value));
+
+                if (index < MinValue) {
+                    return std::string_view{};
+                }
+                index -= MinValue;
+
+                if (index >= Count) { return std::string_view{}; }
                 return Names[index];
             }
 
@@ -36,15 +42,14 @@ namespace JCore {
                 if (Count < 1) { return true; }
 
                 uint64_t original = index;
-                while (index < Count) {
-                    if (!ignoreNoDraw || noDraw(index, Names)) {
-
-                        index++;
-                        if (index >= Count) {
-                            index = 0;
-                        }
-                        if (index == original) { break; }
+                while (true) {
+                    if (index < Count && (!ignoreNoDraw || !noDraw(index, Names))) {
+                        break;
                     }
+                    if (++index >= Count) {
+                        index = MinValue;
+                    }
+                    if (index == original) { break; }
                 }
                 return index != original;
             }

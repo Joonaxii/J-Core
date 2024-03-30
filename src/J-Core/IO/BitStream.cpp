@@ -1,6 +1,6 @@
 #include <J-Core/IO/BitStream.h>
 #include <J-Core/Math/Math.h>
-
+using namespace JCore;
 
 //TODO: Finish writing this bitstream class.
 
