@@ -1,9 +1,11 @@
 #pragma once
 #define IMGUI_DEFINE_MATH_OPERATORS
+#include <J-Core/Log.h>
 #include <J-Core/Gui/IGuiDrawable.h>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <misc/cpp/imgui_stdlib.h>
+#include <J-Core/Util/EnumUtils.h>
 #include <glm.hpp>
 #include <J-Core/Rendering/Texture.h>
 #include <J-Core/Util/StringUtils.h>
@@ -105,15 +107,15 @@ namespace JCore::Gui {
     bool searchDialogCenter(const char* label, uint8_t flags, std::string& path, const char* types = nullptr, size_t defaultType = 1);
     bool searchDialogLeft(const char* label, uint8_t flags, std::string& path, const char* types = nullptr, size_t defaultType = 1);
 
-    bool drawBitMask(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc, bool allowMultiple = true, bool displayAll = true);
+    bool drawBitMask(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, JCore::Enum::GetEnumName nameFunc, bool allowMultiple = true, bool displayAll = true);
 
     template<typename T, typename STR>
     bool drawBitMask(std::string_view label, T& value, uint64_t start, uint64_t length, const STR* names, bool allowMultiple = true, bool displayAll = true) {
-        SASSERT(Enum::isUnsigned<T>(), "Bitmask must be an unsigned type!");
-        SASSERT(sizeof(T) <= 8, "Given type is too big to be a bitmask! (8 bytes max)");
+        static_assert(Enum::isUnsigned<T>(), "Bitmask must be an unsigned type!");
+        static_assert(sizeof(T) <= 8, "Given type is too big to be a bitmask! (8 bytes max)");
 
         static constexpr uint64_t BITS = (sizeof(T) << 3);
-        JE_CORE_ASSERT(BITS >= start, "Given start bit is higher than total number of bits!");
+        JCORE_ASSERT(BITS >= start, "Given start bit is higher than total number of bits!");
 
         return drawBitMask(label, &value, sizeof(T), start, length,
             [names, &start](const void* ptr)
@@ -141,7 +143,7 @@ namespace JCore::Gui {
         return drawDropDown(label, &value, sizeof(T), uint64_t(StartValue), uint64_t(itemCount), [names](const void* ptr)
             {
                 uint64_t index = 0;
-                JE_COPY(&index, ptr, Math::min(sizeof(T), sizeof(uint64_t)));
+                memcpy(&index, ptr, Math::min(sizeof(T), sizeof(uint64_t)));
                 return std::string_view{ names[index - uint64_t(StartValue)] };
             });
     }
@@ -217,7 +219,8 @@ namespace JCore::Gui {
     bool drawSplitter(const char* id, bool splitVertical, float thickness, float* size0, float* size1, float minSize0, float minSize1, float splitterAxisSize = -1.0f);
 
     void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f);
-    void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr);
+    void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f, const glm::vec2& uvMin = { 0, 0 }, const glm::vec2& uvMax = { 1, 1 }, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr);
+    void drawTexture(const Texture* texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f, const glm::vec2& uvMin = { 0, 0 }, const glm::vec2& uvMax = { 1, 1 }, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr);
 
 
     bool drawProgressBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col, const ImU32& hi_col_lhs);

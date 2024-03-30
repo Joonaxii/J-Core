@@ -117,6 +117,51 @@ namespace JCore {
         return slot;
     }
 
+    uint32_t Texture::bind(TextureFormat format, uint32_t slot, uint32_t id0, uint32_t id1, int8_t mipLevel, int32_t override02D, int32_t override12D) {
+        uint32_t curMip = 0;
+
+        glActiveTexture(GL_TEXTURE0 + slot++);
+        uint16_t texT = override02D != 0 ? GL_TEXTURE_2D : GL_TEXTURE_1D;
+        glBindTexture(texT, id0);
+        if (id0 && mipLevel > -1) {
+            int mipToSampleFrom = mipLevel - 1;
+            glTexParameteri(texT, GL_TEXTURE_BASE_LEVEL, mipToSampleFrom);
+            glTexParameteri(texT, GL_TEXTURE_MAX_LEVEL, mipToSampleFrom);
+        }
+
+        {
+            if (format == TextureFormat::Indexed8) {
+                glActiveTexture(GL_TEXTURE0 + slot++);
+                glBindTexture(override12D > 0 ? GL_TEXTURE_2D : GL_TEXTURE_1D, id1);
+            }
+            else if (format == TextureFormat::Indexed16) {
+                glActiveTexture(GL_TEXTURE0 + slot++);
+                glBindTexture(override12D == 0 ? GL_TEXTURE_1D : GL_TEXTURE_2D, id1);
+            }
+        }
+        return slot;
+    }
+    uint32_t Texture::unbind(TextureFormat format, uint32_t slot, bool resetMip, int32_t override02D, int32_t override12D) {
+        glActiveTexture(GL_TEXTURE0 + slot++);
+        uint16_t texT = override02D != 0 ? GL_TEXTURE_2D : GL_TEXTURE_1D;
+        glBindTexture(texT, 0);
+
+        if (resetMip) {
+            glTexParameteri(texT, GL_TEXTURE_BASE_LEVEL, 0);
+            glTexParameteri(texT, GL_TEXTURE_MAX_LEVEL, 1000);
+        }
+
+        if (format == TextureFormat::Indexed8) {
+            glActiveTexture(GL_TEXTURE0 + slot++);
+            glBindTexture(override12D > 0 ? GL_TEXTURE_2D : GL_TEXTURE_1D, 0);
+        }
+        else if (format == TextureFormat::Indexed16) {
+            glActiveTexture(GL_TEXTURE0 + slot++);
+            glBindTexture(override12D == 0 ? GL_TEXTURE_1D : GL_TEXTURE_2D, 0);
+        }
+        return slot;
+    }
+
     uint8_t* Texture::getPixels() const {
         size_t size = _width * _height * getBitsPerPixel(_format);
         if (_format == TextureFormat::Indexed8) {

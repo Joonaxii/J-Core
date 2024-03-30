@@ -297,4 +297,4 @@ namespace JCore {
         const Task& getCurrentTask();
     }
 }
-ENUM_BIT_OPERATORS(JCore::TaskProgressType)
+CREATE_ENUM_OPERATORS(JCore::TaskProgressType)

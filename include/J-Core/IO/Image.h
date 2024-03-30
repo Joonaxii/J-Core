@@ -13,7 +13,7 @@ namespace JCore {
     };
 
     struct ImageEncodeParams {
-        uint32_t dpi{ 96 };
+        int32_t dpi{ 96 };
         int32_t compression{ 6 };
     };
 

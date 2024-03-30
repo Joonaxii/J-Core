@@ -101,6 +101,13 @@ namespace JCore {
         static void addRenderable(Renderable* renderable);
         static void removeRenderable(Renderable* renderable);
 
+        Shader& getShader(TextureFormat format) {
+            switch (format) {
+            default: return _shaders[0];
+            case TextureFormat::Indexed8: return _shaders[1];
+            }
+        }
+
     private:
         static Renderer* Instance;
 

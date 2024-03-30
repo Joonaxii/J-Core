@@ -33,6 +33,9 @@ namespace JCore {
         uint32_t bind(uint32_t slot) const;
         uint32_t unBind(uint32_t slot) const;
 
+        static uint32_t bind(TextureFormat format, uint32_t slot, uint32_t id0, uint32_t id1 = 0, int8_t mipLevel = -1, int32_t override02D = -1, int32_t override12D = -1);
+        static uint32_t unbind(TextureFormat format, uint32_t slot, bool resetMip = false, int32_t override02D = -1, int32_t override12D = -1);
+
         uint32_t getHash() const { return _crcTex; }
         uint8_t getFlags() const { return _flags; }
 

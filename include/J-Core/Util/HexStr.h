@@ -209,7 +209,7 @@ namespace JCore {
     static constexpr RawStrBE NullRawBE{};
 }
 
-#define HEX_LE(x) ::JEngine::HexStrLE(x)
-#define HEX_BE(x) ::JEngine::HexStrBE(x)
-#define RAW_LE(x) ::JEngine::RawStrLE(x)
-#define RAW_BE(x) ::JEngine::RawStrBE(x)
+#define HEX_LE(x) ::JCore::HexStrLE(x)
+#define HEX_BE(x) ::JCore::HexStrBE(x)
+#define RAW_LE(x) ::JCore::RawStrLE(x)
+#define RAW_BE(x) ::JCore::RawStrBE(x)

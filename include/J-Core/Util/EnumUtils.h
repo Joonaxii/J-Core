@@ -8,6 +8,8 @@
 #define TO_BASE(TYPE, VAL) static_cast<typename BASE_TYPE(TYPE)>(VAL)
 #define TO_BASE_REF(TYPE, INPUT) reinterpret_cast<BASE_TYPE(TYPE)&>(INPUT)
 #define TO_REF(TYPE, INPUT) reinterpret_cast<TYPE&>(INPUT)
+#define NULL_NAME std::string_view{}
+
 
 namespace JCore {
     namespace detail {
@@ -73,26 +75,26 @@ namespace JCore {
 
         template<typename T, size_t ID = 0>
         FORCE_INLINE std::string_view nameOf_Void(const void* value) {
-            return ::JEngine::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getEnumName_Void(value, EnumInfo<T, ID>::Names);
+            return ::JCore::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getEnumName_Void(value, EnumInfo<T, ID>::Names);
         }
 
         template<typename T, size_t ID = 0>
         FORCE_INLINE constexpr std::string_view nameOf(const T& value) {
-            return ::JEngine::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getEnumName(value, EnumInfo<T, ID>::Names);
+            return ::JCore::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getEnumName(value, EnumInfo<T, ID>::Names);
         }
 
         template<typename T, size_t ID = 0>
         FORCE_INLINE constexpr bool nextValidIndex(size_t& index) {
-            return ::JEngine::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getNextValidIndex(index, EnumInfo<T, ID>::Names);
+            return ::JCore::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getNextValidIndex(index, EnumInfo<T, ID>::Names);
         }
     }
 }
 
-#define IS_ENUM_DEFINED(ENUM, ID) (::JEngine::Enum::isDefinedEnum<ENUM, ID>())
+#define IS_ENUM_DEFINED(ENUM, ID) (::JCore::Enum::isDefinedEnum<ENUM, ID>())
 
 #define DEFINE_ENUM(TYPE, IS_BITFIELD, MIN_VAL, COUNT, ...)\
 template<>\
-struct ::JEngine::EnumInfo<TYPE, 0> { \
+struct ::JCore::EnumInfo<TYPE, 0> { \
     static constexpr bool IsDefined = true;\
     static constexpr bool IsBitField = IS_BITFIELD;\
     static constexpr uint64_t MinValue = uint64_t(MIN_VAL);\
@@ -102,7 +104,7 @@ struct ::JEngine::EnumInfo<TYPE, 0> { \
 
 #define DEFINE_ENUM_ID(TYPE, ID, IS_BITFIELD, MIN_VAL, COUNT, ...)\
 template<>\
-struct ::JEngine::EnumInfo<TYPE, ID> { \
+struct ::JCore::EnumInfo<TYPE, ID> { \
     static constexpr bool IsDefined = true;\
     static constexpr bool IsBitField = IS_BITFIELD;\
     static constexpr uint64_t MinValue = uint64_t(MIN_VAL);\

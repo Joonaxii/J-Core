@@ -102,7 +102,6 @@ namespace JCore::Gui {
         ImGui::EndGroup();
         return changed;
     }
-
     bool searchDialogLeft(const char* label, uint8_t flags, std::string& path, const char* types, size_t defaultType) {
         ImGui::BeginGroup();
         ImGui::PushID(label);
@@ -175,7 +174,6 @@ namespace JCore::Gui {
     bool drawSplitter(bool splitVertical, float thickness, float* size0, float* size1, float minSize0, float minSize1, float splitterAxisSize) {
         return drawSplitter("##Splitter", splitVertical, thickness, size0, size1, minSize0, minSize1, splitterAxisSize);
     }
-
     bool drawSplitter(const char* idIn, bool splitVertical, float thickness, float* size0, float* size1, float minSize0, float minSize1, float splitterAxisSize) {
         ImGuiContext& g = *GImGui;
         ImGuiWindow* window = g.CurrentWindow;
@@ -184,17 +182,6 @@ namespace JCore::Gui {
         bb.Min = window->DC.CursorPos + (splitVertical ? ImVec2(*size0, 0.0f) : ImVec2(0.0f, *size0));
         bb.Max = bb.Min + ImGui::CalcItemSize(splitVertical ? ImVec2(thickness, splitterAxisSize) : ImVec2(splitterAxisSize, thickness), 0.0f, 0.0f);
         return ImGui::SplitterBehavior(bb, id, splitVertical ? ImGuiAxis_X : ImGuiAxis_Y, size0, size1, minSize0, minSize1, 0.0f);
-    }
-
-    void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect, float edge) {
-        void* texPtr = (void*)size_t(texture);
-        if (keepAspect) {
-            float size = 1.0f - edge;
-            float aspectA = width / float(height);
-            ImGui::Image(texPtr, { sizeX * aspectA * size, sizeY * size });
-            return;
-        }
-        ImGui::Image(texPtr, { sizeX, sizeY });
     }
 
     static void drawTextureInfoGui(std::shared_ptr<Texture>& texture, const ImVec2& size, const ImVec2& frameSize) {
@@ -225,20 +212,173 @@ namespace JCore::Gui {
         ImGui::EndChildFrame();
     }
 
-    void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge, uint8_t* extraFlags, uint64_t* overrideId, uint32_t* overrideHash, Color32* bgColor) {
+    struct TexDrawData {
+        int8_t mipLevel{ -1 };
+        uint32_t glId[2]{ 0, 0 };
+        bool isTex1D{ false };
+        TextureFormat format{};
+        TextureFormat rawFormat{};
+    };
+
+    static void drawTextureCB(const ImDrawCmd* cmd, TextureFormat format, TextureFormat rawFormat, int8_t mipLevel, uint32_t glID0, uint32_t glID1) {
+        auto rend = Renderer::getInstance();
+        const Shader* shader = nullptr;
+        switch (format)
+        {
+            case TextureFormat::Indexed8:
+                shader = &rend->getShader(format);
+                break;
+        }
+
+        if (shader) {
+            shader->bind();
+        }
+
+        Texture::bind(rawFormat, 0, glID0, glID1, mipLevel, rawFormat == TextureFormat::Indexed8 ? 0 : -1);
+        (glDrawElements(GL_TRIANGLES, (GLsizei)cmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, (void*)(intptr_t)(cmd->IdxOffset * sizeof(ImDrawIdx))));
+        Texture::unbind(rawFormat, 0, true, rawFormat == TextureFormat::Indexed8 ? 0 : -1);
+        if (shader) {
+            shader->unbind();
+        }
+    }
+
+    static bool setupDrawCallback(const ImDrawList* parent_list, const ImDrawCmd* cmd) {
+        auto draw_data = ImGui::GetDrawData();
+        int fb_height = (int)(draw_data->DisplaySize.y * draw_data->FramebufferScale.y);
+        ImVec2 clip_off = draw_data->DisplayPos;
+        ImVec2 clip_scale = draw_data->FramebufferScale;
+
+        // Project scissor/clipping rectangles into framebuffer space
+        ImVec2 clip_min((cmd->ClipRect.x - clip_off.x) * clip_scale.x, (cmd->ClipRect.y - clip_off.y) * clip_scale.y);
+        ImVec2 clip_max((cmd->ClipRect.z - clip_off.x) * clip_scale.x, (cmd->ClipRect.w - clip_off.y) * clip_scale.y);
+        if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+            return true;
+
+        (glScissor((int)clip_min.x, (int)((float)fb_height - clip_max.y), (int)(clip_max.x - clip_min.x), (int)(clip_max.y - clip_min.y)));
+        return false;
+    }
+
+    static void drawTextureCallback(const ImDrawList* parent_list, const ImDrawCmd* cmd) {
+        TexDrawData* texPtr = reinterpret_cast<TexDrawData*>(cmd->UserCallbackData);
+        if (texPtr) {
+            if (setupDrawCallback(parent_list, cmd)) { return; }
+            drawTextureCB(cmd, texPtr->format, texPtr->rawFormat, texPtr->mipLevel, texPtr->glId[0], texPtr->glId[1]);
+        }
+    }
+
+    void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect, float edge, int8_t mipLevel) {
+        static TexDrawData TexData{};
+
+        TexData.glId[0] = texture;
+        TexData.format = TextureFormat::RGBA32;
+        TexData.mipLevel = mipLevel;
+        auto drawList = ImGui::GetWindowDrawList();
+        drawList->AddCallback(drawTextureCallback, &TexData);
+
+        void* texPtr = (void*)size_t(texture);
+        if (keepAspect) {
+            float size = 1.0f - edge;
+            float aspectA = width / float(height);
+            ImGui::Image(texPtr, { sizeX * aspectA * size, sizeY * size });
+            return;
+        }
+        ImGui::Image(texPtr, { sizeX, sizeY });
+    }
+
+    static void drawTextureInfoGui(const Texture* texture, const ImVec2& size, const ImVec2& frameSize) {
+        if (!texture) { return; }
+        ImGui::BeginChildFrame(ImGui::GetID("Textxure Info"), frameSize, ImGuiWindowFlags_NoDecoration);
+
+        ImGui::SetCursorPosY(frameSize.y * 0.5f - (size.y * 0.5f));
+
+        int32_t width = texture->getWidth();
+        int32_t height = texture->getHeight();
+        int32_t paletteSize = texture->getPaletteSize();
+        TextureFormat fmt = texture->getFormat();
+
+        ImGui::Text(" - Resolution   : %ix%i", width, height);
+        ImGui::Text(" - Format       : %s", getTextureFormatName(fmt));
+        ImGui::Text(" - Hash         : 0x%08X", texture->getHash());
+
+        switch (fmt) {
+        case JCore::TextureFormat::Indexed8:
+        case JCore::TextureFormat::Indexed16:
+            ImGui::Text(" - Palette Size : %i", texture->getPaletteSize());
+            break;
+        }
+
+        char tempBuf[256]{ 0 };
+        Utils::formatDataSize(tempBuf, calculateTextureSize(texture->getWidth(), texture->getHeight(), texture->getFormat(), texture->getPaletteSize()));
+        ImGui::Text(" - Memory Usage : %s", tempBuf);
+        ImGui::EndChildFrame();
+    }
+
+    static void drawTextureExport(const Texture* tex, ImageEncodeParams& encodeParams, DataFormat& format) {
+        const char* IMAGE_FMT = nullptr;
+        bool pressed = ImGui::Button("Export##TexturePreview");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120);
+        Gui::drawEnumList<DataFormat, 0>("Format##TexturePreview", format);
+        switch (format) {
+        case DataFormat::FMT_PNG:
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 10);
+            ImGui::SliderInt("Compression##TexturePreview", &encodeParams.compression, 0, 9);
+            IMAGE_FMT = "PNG File (*.png)\0*.png\0";
+            break;
+        case DataFormat::FMT_BMP:
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 10);
+            ImGui::SliderInt("DPI##TexturePreview", &encodeParams.dpi, 32, 300);
+            IMAGE_FMT = "BMP File (*.bmp)\0*.bmp\0";
+            break;
+        case DataFormat::FMT_DDS:
+            IMAGE_FMT = "DDS File (*.dds)\0*.dds\0";
+            break;
+        case DataFormat::FMT_JTEX:
+            IMAGE_FMT = "JTEX File (*.jtex)\0*.jtex\0";
+            break;
+        }
+
+        if (pressed && IMAGE_FMT) {
+            std::string path = IO::openFile(IMAGE_FMT, 260, true);
+            ImageData data{ tex->getWidth(), tex->getHeight(), tex->getFormat(), tex->getPaletteSize(), tex->getPixels() };
+            Image::tryEncode(path.c_str(), data, format, encodeParams);
+            data.clear(true);
+        }
+
+    }
+
+    static bool drawTexturePreview(const Texture* tex, bool& isOpen, ImageEncodeParams& encodeParams, DataFormat& format) {
+        if (ImGui::Begin("Texture Preview##TexturePreview", &isOpen)) {
+            drawTextureExport(tex, encodeParams, format);
+            ImGui::Separator();
+            auto avail = ImGui::GetContentRegionAvail();
+            float maxS = std::max(avail.x, avail.y);
+            Gui::drawTexture(tex, 0, maxS, maxS, true, 0.1f);
+        }
+        ImGui::End();
+        return isOpen;
+    }
+
+
+    void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge, const glm::vec2& uvMin, const glm::vec2& uvMax, uint8_t* extraFlags, uint64_t* overrideId, uint32_t* overrideHash, Color32* bgColor) {
+        drawTexture(texture.get(), flags, sizeX, sizeY, keepAspect, edge, uvMin, uvMax, extraFlags, overrideId, overrideHash, bgColor);
+    }
+    void drawTexture(const Texture* texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge, uint8_t* extraFlags, uint64_t* overrideId, uint32_t* overrideHash, Color32* bgColor, int8_t* mipLevel) {
         if (!texture || !texture->isValid()) {
             return;
         }
+        static TexDrawData TexData{};
+        auto drawList = ImGui::GetWindowDrawList();
+        TexData.rawFormat = texture->getFormat();
 
         uint32_t infoLvl = flags & GUI_TEX_INFO_MASK;
 
         TextureFormat fmt = texture->getFormat();
         bool isIndexed = fmt == TextureFormat::Indexed8 || fmt == TextureFormat::Indexed16;
 
-        bool newInstance = false;
-        const FrameBuffer* paletteBuf = isIndexed ? Renderer::getInstance()->getFrameBufferPool().retrieve(overrideId ? *overrideId : uint64_t(texture.get()), newInstance) : nullptr;
-        static uint32_t prevTexHash = 0;
-
+        static int32_t gMipLevel = -1;
         uint32_t main = texture->getTextureId();
         uint32_t pale = texture->getPaletteId();
 
@@ -253,7 +393,7 @@ namespace JCore::Gui {
 
         float cPX = ImGui::GetCursorPosX();
 
-        ImGui::PushID(texture.get());
+        ImGui::PushID(texture);
         bool blendPalette = (flags & GUI_TEX_SHOW_EXTRA) ? blending : (flags & GUI_TEX_BLEND_INDEXED);
         bool useFB = (isIndexed && blendPalette) || texture->getFormat() == TextureFormat::Indexed8;
 
@@ -264,16 +404,16 @@ namespace JCore::Gui {
         static constexpr float BUFFER_INFO = 20;
         static constexpr float WIDTH_INFO = 275;
 
-        float infoHeight = ImGui::GetTextLineHeight() * (isIndexed ? 5 : 4);
+        float infoHeight = ImGui::GetTextLineHeight() * (isIndexed ? 6 : 5);
 
         switch (infoLvl) {
-            case GUI_TEX_INFO_ABOVE:
-            case GUI_TEX_INFO_BELOW:
-                infoOffsetY = infoHeight + BUFFER_INFO + 20;
-                break;
-            case GUI_TEX_INFO_SIDE:
-                infoOffsetX = WIDTH_INFO + BUFFER_INFO;
-                break;
+        case GUI_TEX_INFO_ABOVE:
+        case GUI_TEX_INFO_BELOW:
+            infoOffsetY = infoHeight + BUFFER_INFO + 20;
+            break;
+        case GUI_TEX_INFO_SIDE:
+            infoOffsetX = WIDTH_INFO + BUFFER_INFO;
+            break;
         }
 
         if (keepAspect) {
@@ -296,12 +436,12 @@ namespace JCore::Gui {
         float paletteRegionSize = 0;
         if (showPalette) {
             switch (fmt) {
-                case JCore::TextureFormat::Indexed8:
-                    paletteRegionSize = sizeY * 0.25f;
-                    break;
-                case JCore::TextureFormat::Indexed16:
-                    paletteRegionSize = sizeY * (std::max(0.25f, (texture->getPaletteSize() >> 8) / 256.0f));
-                    break;
+            case TextureFormat::Indexed8:
+                paletteRegionSize = sizeY * 0.25f;
+                break;
+            case TextureFormat::Indexed16:
+                paletteRegionSize = sizeY * (std::max(0.25f, (texture->getPaletteSize() >> 8) / 256.0f));
+                break;
             }
         }
 
@@ -347,130 +487,84 @@ namespace JCore::Gui {
             ImGui::Separator();
         }
 
+        TexData.mipLevel = -1;
+
         float cY = ImGui::GetCursorPosY();
         ImVec2 infoSize = { float(WIDTH_INFO) + BUFFER_INFO - 25.0f,  float(infoHeight) + BUFFER_INFO };
         switch (infoLvl)
         {
-            default:
-                ImGui::SetCursorPos({ 0, cY });
-                break;
-            case GUI_TEX_INFO_ABOVE:
-                ImGui::SetCursorPos({0, cY });
-                drawTextureInfoGui(texture, infoSize, { sizeX , infoSize.y });
-                ImGui::Separator();
-                ImGui::SetCursorPos({ 0, cY });
-                break;
+        default:
+            ImGui::SetCursorPos({ 0, cY });
+            break;
+        case GUI_TEX_INFO_ABOVE:
+            ImGui::SetCursorPos({ 0, cY });
+            drawTextureInfoGui(texture, infoSize, { sizeX , infoSize.y });
+            ImGui::Separator();
+            ImGui::SetCursorPos({ 0, cY });
+            break;
 
-            case GUI_TEX_INFO_SIDE: {
-                ImGui::SetCursorPos({ sizeX + BUFFER_INFO, cY });
-                ImGuiWindow* window = ImGui::GetCurrentWindow();
-                auto curL = window->DC.CurrLineSize;
-                window->DC.CurrLineSize.y = rawH - 22;
+        case GUI_TEX_INFO_SIDE: {
+            ImGui::SetCursorPos({ sizeX + BUFFER_INFO, cY });
+            ImGuiWindow* window = ImGui::GetCurrentWindow();
+            auto curL = window->DC.CurrLineSize;
+            window->DC.CurrLineSize.y = rawH - 22;
 
-                ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
-                window->DC.CurrLineSize = curL;
-                ImGui::SameLine();
-                drawTextureInfoGui(texture, infoSize, infoSize);
-                break; 
-            }
+            ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+            window->DC.CurrLineSize = curL;
+            ImGui::SameLine();
+            drawTextureInfoGui(texture, infoSize, infoSize);
+            break;
+        }
 
-            case GUI_TEX_INFO_BELOW:
-                ImGui::SetCursorPos({ 0, dummyHeight + BUFFER_INFO });
-                ImGui::Separator();
-                ImGui::SetCursorPosX(0);
-                drawTextureInfoGui(texture, infoSize, { sizeX , infoSize.y });
-                ImGui::SetCursorPosX(0);
-                break;
+        case GUI_TEX_INFO_BELOW:
+            ImGui::SetCursorPos({ 0, dummyHeight + BUFFER_INFO });
+            ImGui::Separator();
+            ImGui::SetCursorPosX(0);
+            drawTextureInfoGui(texture, infoSize, { sizeX , infoSize.y });
+            ImGui::SetCursorPosX(0);
+            break;
         }
 
         ImGui::SetCursorPos({ 0, cY });
-        ImGui::Image((void*)size_t((blendPalette && isIndexed && paletteBuf) ? paletteBuf->getColorAttatchment() : main), { sizeX, sizeY });
-        static uint8_t* blendBuffer{ nullptr };
-        static size_t curBufSize = 0;
 
-        uint32_t& prevHash = overrideHash ? *overrideHash : prevTexHash;
-        if (showPalette || blendPalette) {
-            if (blendPalette && paletteBuf) {
-                int32_t bpp = texture->getFormat() == TextureFormat::Indexed8 ? 1 : 2;
-                int32_t palOffset = texture->getPaletteSize() * 4;
-                size_t blendSize = (width * height * sizeof(Color32));
-                size_t requiredSize = blendSize + (bpp * width * height + palOffset);
-
-                if (prevHash != texture->getHash() || !blendBuffer || !paletteBuf->isValid() || newInstance) {
-                    if (blendBuffer) {
-                        if (curBufSize < requiredSize) {
-                            void* data = reinterpret_cast<uint8_t*>(realloc(blendBuffer, requiredSize));
-                            if (!data) {
-                                return;
-                            }
-                            blendBuffer = reinterpret_cast<uint8_t*>(data);
-                            curBufSize = requiredSize;
-                        }
-                    }
-                    else if (curBufSize < requiredSize) {
-                        blendBuffer = reinterpret_cast<uint8_t*>(malloc(requiredSize));
-                        curBufSize = requiredSize;
-                    }
-
-                    uint8_t* ogData = blendBuffer + blendSize;
-                    texture->getPixels(ogData);
-
-                    uint8_t* ogPixelData = blendBuffer + blendSize + palOffset;
-                    Color32* palette = reinterpret_cast<Color32*>(ogData);
-                    Color32* blendData = reinterpret_cast<Color32*>(blendBuffer);
-                    int32_t indexBuffer = 0;
-                    for (size_t i = 0, j = 0; i < width * height; i++, j += bpp) {
-                        memcpy(&indexBuffer, ogPixelData + j, bpp);
-                        blendData[i] = palette[indexBuffer];
-                    }
-
-                    FrameBufferSpecs specs{};
-                    specs.width = width;
-                    specs.height = height;
-                    specs.colorFormat = GL_RGBA8;
-                    specs.pixelData = blendBuffer;
-
-                    paletteBuf->invalidate(specs, true, true);
-                    uint32_t fbCa = paletteBuf->getColorAttatchment();
-                    prevHash = texture->getHash();
-                }
+        if (isIndexed) {
+            if (blendPalette) {
+                TexData.format = texture->getFormat();
+                TexData.glId[0] = texture->getTextureId();
+                TexData.glId[1] = texture->getPaletteId();
+                drawList->AddCallback(drawTextureCallback, &TexData);
+                ImGui::Image((void*)size_t(texture->getTextureId()), { sizeX, sizeY });
             }
             else {
-                if (useFB && paletteBuf) {
-                    uint32_t palHash = texture->getHash() ^ 0xFFFFFFFFU;
-                    if (prevHash != palHash || !paletteBuf->isValid() || newInstance) {
-                        FrameBufferSpecs specs{};
-                        specs.width = 256;
-                        specs.height = 1;
-                        specs.colorFormat = GL_RGBA8;
-                        specs.pixelData = nullptr;
+                TexData.format = TextureFormat::R8;
+                TexData.glId[0] = texture->getTextureId();
+                TexData.glId[1] = texture->getPaletteId();
+                drawList->AddCallback(drawTextureCallback, &TexData);
+                ImGui::Image((void*)size_t(texture->getTextureId()), { sizeX, sizeY });
+            }
 
-                        paletteBuf->invalidate(specs, true, true);
-                        uint32_t fbCa = paletteBuf->getColorAttatchment();
-
-                        glCopyImageSubData(pale, GL_TEXTURE_1D, 0, 0, 0, 0,
-                            fbCa, GL_TEXTURE_2D, 0, 0, 0, 0,
-                            256, 1, 1);
-
-                        prevHash = palHash;
-
-                        glBindTexture(GL_TEXTURE_2D, 0);
-                        glBindTexture(GL_TEXTURE_1D, 0);
-
-                    }
-                    ImGui::SetCursorPos({ 0, cY + sizeY });
-                    ImGui::Image((void*)size_t(paletteBuf->getColorAttatchment()), { sizeX, paletteRegionSize });
-                }
-                else {
-                    ImGui::SetCursorPos({ 0, cY + sizeY });
-                    ImGui::Image((void*)size_t(texture->getPaletteId()), { sizeX, paletteRegionSize });
-                }
+            if (showPalette) {
+                TexData.format = TextureFormat::RGBA32;
+                TexData.glId[0] = texture->getPaletteId();
+                TexData.glId[1] = 0;
+                ImGui::SetCursorPos({ 0, cY + sizeY });
+                drawList->AddCallback(drawTextureCallback, &TexData);
+                ImGui::Image((void*)size_t(texture->getPaletteId()), { sizeX, paletteRegionSize });
             }
         }
-
+        else {
+            TexData.format = texture->getFormat();
+            TexData.glId[0] = texture->getTextureId();
+            TexData.glId[1] = texture->getPaletteId();
+            drawList->AddCallback(drawTextureCallback, &TexData);
+            ImGui::Image((void*)size_t(texture->getTextureId()), { sizeX, sizeY });
+        }
         ImGui::EndChildFrame();
         ImGui::PopID();
     }
+
+
+
 
     bool drawProgressBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col, const ImU32& hi_col_lhs) {
         ImGuiWindow* window = ImGui::GetCurrentWindow();
@@ -521,7 +615,6 @@ namespace JCore::Gui {
         }
         return true;
     }
-
     bool drawProgressSpinner(const char* label, float radius, float thickness, const ImU32& color) {
         ImGuiWindow* window = ImGui::GetCurrentWindow();
         if (window->SkipItems) { return false; }
@@ -557,7 +650,6 @@ namespace JCore::Gui {
         window->DrawList->PathStroke(color, false, thickness);
         return true;
     }
-
 
     bool drawBitMask(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc, bool allowMultiple, bool displayAll) {
         size = Math::min(size, 8ULL);
@@ -628,7 +720,7 @@ namespace JCore::Gui {
         }
 
         if (changed) {
-            JE_COPY(value, &bits, size);
+            memcpy(value, &bits, size);
         }
         return changed;
     }
@@ -637,7 +729,7 @@ namespace JCore::Gui {
         bool changed = false;
         uint64_t selectI = 0;
         size = Math::min(size, sizeof(uint64_t));
-        JE_COPY(&selectI, value, size);
+        memcpy(&selectI, value, size);
 
         if (ImGui::BeginCombo(label, nameFunc(&selectI)))
         {
@@ -648,7 +740,7 @@ namespace JCore::Gui {
                 ImGui::PushID(&i);
                 if (ImGui::Selectable(name, bool(j == selectI), 0)) {
                     selectI = j;
-                    JE_COPY(value, &selectI, size);
+                    memcpy(value, &selectI, size);
                     changed = true;
                 }
                 ImGui::PopID();

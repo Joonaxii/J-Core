@@ -3,8 +3,8 @@
 #include <J-Core/Rendering/Renderer.h>
 #include <iostream>
 #include <imgui.h>
-#include <imgui_impl_opengl3.h>
-#include <imgui_impl_glfw.h>
+#include <backends/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_glfw.h>
 #include <J-Core/Math/Vertex.h>
 #include <J-Core/Math/Rect.h>
 #include <J-Core/Rendering/Sprite.h>

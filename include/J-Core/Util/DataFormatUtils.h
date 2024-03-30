@@ -44,7 +44,75 @@ namespace JCore {
     enum FormatNameSource {
         FMTN_NAME = 0x0,
         FMTN_EXTENSION = 0x1,
+        FMTN_EXPORTABLE_IMAGE = 0x2,
     };
+
+
+    DEFINE_ENUM_ID(JCore::DataFormat, JCore::FMTN_NAME, false, 0, JCore::_FMT_COUNT,
+        "Binary",
+        "Text",
+        "JSON",
+        "YAML",
+
+        "",
+
+        "PNG",
+        "BMP",
+        "DDS",
+        "JPEG",
+        "GIF87",
+        "GIF89",
+        "WEBP",
+        "WAVE",
+        "OGG",
+        "MP3",
+        "TTF",
+        "OTF",
+        "JTEX");
+
+    DEFINE_ENUM_ID(JCore::DataFormat, JCore::FMTN_EXTENSION, false, 0, JCore::_FMT_COUNT,
+        ".bin",
+        ".txt",
+        ".json",
+        ".yaml",
+
+        "",
+
+        ".png",
+        ".bmp",
+        ".dds",
+        ".jpeg",
+        ".gif",
+        ".gif",
+        ".webp",
+        ".wav",
+        ".ogg",
+        ".mp3",
+        ".ttf",
+        ".otf",
+        ".jtex");
+
+    DEFINE_ENUM_ID(JCore::DataFormat, JCore::FMTN_EXPORTABLE_IMAGE, false, 0, JCore::_FMT_COUNT,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+
+        NULL_NAME,
+
+        "PNG",
+        "BMP",
+        "DDS",
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        NULL_NAME,
+        "JTEX");
 
     struct FormatInfo {
         const char* signature{0};
@@ -87,95 +155,12 @@ namespace JCore {
 
          DataFormat getFormat(const char* path, int64_t size = -1, DataFormatFlags flags = DataFormatFlags(0), std::function<void(void*, size_t)> dataTransform = nullptr);
          DataFormat getFormat(const Stream& stream, int64_t size = -1, DataFormatFlags flags = DataFormatFlags(0), std::function<void(void*, size_t)> dataTransform = nullptr);
-         const char* getExtension(const char* path);
-         const char* getExtension(const Stream& stream);
-         const char* getExtension(DataFormat format);
+         std::string_view getExtension(const char* path);
+         std::string_view getExtension(const Stream& stream);
+
+         constexpr inline std::string_view getExtension(DataFormat format) {
+             return Enum::nameOf<DataFormat, FMTN_EXTENSION>(format);
+         }
     }
 
-    template<>
-    inline constexpr int32_t JCore::EnumNames<DataFormat, FMTN_NAME>::Count{ _FMT_COUNT };
-
-    template<>
-    inline const char** JCore::EnumNames<DataFormat, FMTN_NAME>::getEnumNames() {
-        static const char* names[Count] =
-        {
-            "Binary",
-            "Text",
-            "JSON",
-            "YAML",
-
-            "",
-
-            "PNG",
-            "BMP",
-            "DDS",
-            "JPEG",
-            "GIF87",
-            "GIF89",
-            "WEBP",
-            "WAVE",
-            "OGG",
-            "MP3",
-            "TTF",
-            "OTF",
-            "JTEX",
-        };
-        return names;
-    }
-
-    template<>
-    inline bool EnumNames<DataFormat, FMTN_NAME>::noDraw(int32_t index) {
-        static bool noDraw[Count] {
-            false, false, true, true, true
-        };
-
-        auto names = getEnumNames();
-        if (index < 0 || index >= Count || !names) { return true; }
-        return noDraw[index] || isNoName(names[index]);
-    }
-
-    //Extensions
-    template<>
-    inline constexpr int32_t JCore::EnumNames<DataFormat, FMTN_EXTENSION>::Count{ _FMT_COUNT };
-
-    template<>
-    inline const char** JCore::EnumNames<DataFormat, FMTN_EXTENSION>::getEnumNames() {
-        static const char* names[Count] =
-        {
-            ".bin",
-            ".txt",
-            ".json",
-            ".yaml",
-
-            "",
-
-            ".png",
-            ".bmp",
-            ".dds",
-            ".jpeg",
-            ".gif",
-            ".gif",
-            ".webp",
-            ".wav",
-            ".ogg",
-            ".mp3",
-            ".ttf",
-            ".otf",
-            ".jtex",
-        };
-        return names;
-    }
-
-    template<>
-    inline bool EnumNames<DataFormat, FMTN_EXTENSION>::noDraw(int32_t index) {
-        static bool noDraw[Count]{
-            false, false, true, true, true
-        };
-
-        auto names = getEnumNames();
-        if (index < 0 || index >= Count || !names) { return true; }
-        return noDraw[index] || isNoName(names[index]);
-    }
 }
-
-

@@ -137,15 +137,13 @@ namespace JCore {
             return fmt;
         }
 
-        const char* getExtension(const char* path) {
+        std::string_view getExtension(const char* path) {
             return getExtension(getFormat(path));
         }
-        const char* getExtension(const Stream& stream) {
+        std::string_view getExtension(const Stream& stream) {
             return getExtension(getFormat(stream));
         }
 
-        const char* getExtension(DataFormat format) {
-            return EnumNames<DataFormat, FMTN_EXTENSION>::getEnumName(format);
-        }
+        
     }
 }
