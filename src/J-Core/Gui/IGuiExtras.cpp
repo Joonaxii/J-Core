@@ -266,25 +266,6 @@ namespace JCore::Gui {
         }
     }
 
-    void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect, float edge, int8_t mipLevel) {
-        static TexDrawData TexData{};
-
-        TexData.glId[0] = texture;
-        TexData.format = TextureFormat::RGBA32;
-        TexData.mipLevel = mipLevel;
-        auto drawList = ImGui::GetWindowDrawList();
-        drawList->AddCallback(drawTextureCallback, &TexData);
-
-        void* texPtr = (void*)size_t(texture);
-        if (keepAspect) {
-            float size = 1.0f - edge;
-            float aspectA = width / float(height);
-            ImGui::Image(texPtr, { sizeX * aspectA * size, sizeY * size });
-            return;
-        }
-        ImGui::Image(texPtr, { sizeX, sizeY });
-    }
-
     static void drawTextureInfoGui(const Texture* texture, const ImVec2& size, const ImVec2& frameSize) {
         if (!texture) { return; }
         ImGui::BeginChildFrame(ImGui::GetID("Textxure Info"), frameSize, ImGuiWindowFlags_NoDecoration);
@@ -361,9 +342,26 @@ namespace JCore::Gui {
         return isOpen;
     }
 
+    void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect, float edge, int8_t mipLevel) {
+        static TexDrawData TexData{};
 
-    void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge, const glm::vec2& uvMin, const glm::vec2& uvMax, uint8_t* extraFlags, uint64_t* overrideId, uint32_t* overrideHash, Color32* bgColor) {
-        drawTexture(texture.get(), flags, sizeX, sizeY, keepAspect, edge, uvMin, uvMax, extraFlags, overrideId, overrideHash, bgColor);
+        TexData.glId[0] = texture;
+        TexData.format = TextureFormat::RGBA32;
+        TexData.mipLevel = mipLevel;
+        auto drawList = ImGui::GetWindowDrawList();
+        drawList->AddCallback(drawTextureCallback, &TexData);
+
+        void* texPtr = (void*)size_t(texture);
+        if (keepAspect) {
+            float size = 1.0f - edge;
+            float aspectA = width / float(height);
+            ImGui::Image(texPtr, { sizeX * aspectA * size, sizeY * size });
+            return;
+        }
+        ImGui::Image(texPtr, { sizeX, sizeY });
+    }
+    void drawTexture(std::shared_ptr<Texture> texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge, uint8_t* extraFlags, uint64_t* overrideId, uint32_t* overrideHash, Color32* bgColor, int8_t* mipLevel) {
+        drawTexture(texture.get(), flags, sizeX, sizeY, keepAspect, edge, extraFlags, overrideId, overrideHash, bgColor, mipLevel);
     }
     void drawTexture(const Texture* texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge, uint8_t* extraFlags, uint64_t* overrideId, uint32_t* overrideHash, Color32* bgColor, int8_t* mipLevel) {
         if (!texture || !texture->isValid()) {
@@ -563,9 +561,6 @@ namespace JCore::Gui {
         ImGui::PopID();
     }
 
-
-
-
     bool drawProgressBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col, const ImU32& hi_col_lhs) {
         ImGuiWindow* window = ImGui::GetCurrentWindow();
         if (window->SkipItems) { return false; }
@@ -651,7 +646,7 @@ namespace JCore::Gui {
         return true;
     }
 
-    bool drawBitMask(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc, bool allowMultiple, bool displayAll) {
+    bool drawBitMask_Raw(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc, bool allowMultiple, bool displayAll) {
         size = Math::min(size, 8ULL);
         uint64_t bitCount = (size << 3);
         length = Math::min(length, bitCount - start);
@@ -749,6 +744,44 @@ namespace JCore::Gui {
         }
         return changed;
     }
+}
 
 
+namespace ImGui {
+    bool CollapsingHeaderNoId(ImStrv label, ImStrv idStr, bool* p_visible, ImGuiTreeNodeFlags flags) {
+        ImGuiWindow* window = GetCurrentWindow();
+        if (window->SkipItems) {
+            return false;
+        }
+   
+        if (p_visible && !*p_visible) {
+            return false;
+        }
+          
+        ImGuiID id = window->GetID(idStr);
+        flags |= ImGuiTreeNodeFlags_CollapsingHeader;
+        if (p_visible) {
+            flags |= ImGuiTreeNodeFlags_AllowOverlap | (ImGuiTreeNodeFlags)ImGuiTreeNodeFlags_ClipLabelForTrailingButton;
+        }
+ 
+        bool is_open = TreeNodeBehavior(id, flags, label);
+        if (p_visible != NULL)
+        {
+            // Create a small overlapping close button
+            // FIXME: We can evolve this into user accessible helpers to add extra buttons on title bars, headers, etc.
+            // FIXME: CloseButton can overlap into text, need find a way to clip the text somehow.
+            ImGuiContext& g = *GImGui;
+            ImGuiLastItemData last_item_backup = g.LastItemData;
+            float button_size = g.FontSize;
+            float button_x = ImMax(g.LastItemData.Rect.Min.x, g.LastItemData.Rect.Max.x - g.Style.FramePadding.x - button_size);
+            float button_y = g.LastItemData.Rect.Min.y + g.Style.FramePadding.y;
+            ImGuiID close_button_id = GetIDWithSeed("#CLOSE", NULL, id);
+            if (CloseButton(close_button_id, ImVec2(button_x, button_y))) {
+                *p_visible = false;
+            }         
+            g.LastItemData = last_item_backup;
+        }
+
+        return is_open;
+    }
 }

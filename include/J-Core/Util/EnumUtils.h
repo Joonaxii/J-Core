@@ -1,5 +1,6 @@
 #pragma once
 #include <J-Core/Util/HexStr.h>
+#include <functional>
 #include <string_view>
 #include <cstdint>
 
@@ -31,16 +32,19 @@ namespace JCore {
             static constexpr bool noDraw(uint64_t index, const std::string_view Names[Count]) {
                 return index >= Count || isNoName(Names[index]);
             }
-            static constexpr bool getNextValidIndex(uint64_t& index, const std::string_view Names[Count]) {
+            static constexpr bool getNextValidIndex(uint64_t& index, const std::string_view Names[Count], bool ignoreNoDraw) {
                 if (Count < 1) { return true; }
 
                 uint64_t original = index;
-                while (noDraw(index, Names)) {
-                    index++;
-                    if (index >= Count) {
-                        index = 0;
+                while (index < Count) {
+                    if (!ignoreNoDraw || noDraw(index, Names)) {
+
+                        index++;
+                        if (index >= Count) {
+                            index = 0;
+                        }
+                        if (index == original) { break; }
                     }
-                    if (index == original) { break; }
                 }
                 return index != original;
             }
@@ -61,7 +65,8 @@ namespace JCore {
     };
 
     namespace Enum {
-        typedef std::string_view(*GetEnumName)(const void* value);
+        using GetEnumName = std::function<std::string_view(const void* value)>;
+        //typedef std::string_view(*GetEnumName)(const void* value);
 
         template<typename T>
         constexpr bool isUnsigned() {
@@ -84,8 +89,13 @@ namespace JCore {
         }
 
         template<typename T, size_t ID = 0>
-        FORCE_INLINE constexpr bool nextValidIndex(size_t& index) {
-            return ::JCore::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getNextValidIndex(index, EnumInfo<T, ID>::Names);
+        FORCE_INLINE constexpr bool nextValidIndex(size_t& index, bool ignoreNoDraw) {
+            return ::JCore::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::getNextValidIndex(index, EnumInfo<T, ID>::Names, ignoreNoDraw);
+        }
+
+        template<typename T, size_t ID = 0>
+        FORCE_INLINE constexpr bool isNoDraw(size_t index) {
+            return ::JCore::detail::_Enum<T, ID, EnumInfo<T, ID>::MinValue, EnumInfo<T, ID>::Count, EnumInfo<T, ID>::IsBitField>::noDraw(index, EnumInfo<T, ID>::Names);
         }
     }
 }

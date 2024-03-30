@@ -1945,7 +1945,7 @@ namespace JCore {
 
             switch (format) {
                 default:
-                    JCORE_WARN("[Image-IO] Warning: Unsupported image format '{0}'!", EnumNames<DataFormat>::getEnumName(format));
+                    JCORE_WARN("[Image-IO] Warning: Unsupported image format '{0}'!", Enum::nameOf(format));
                     return false;
                 case DataFormat::FMT_PNG:
                     return Png::getInfo(stream, imgData);
@@ -1983,7 +1983,7 @@ namespace JCore {
             switch (format)
             {
                 default:
-                    JCORE_WARN("[Image-IO] Warning: Unsupported image format '{0}'!", EnumNames<DataFormat>::getEnumName(format));
+                    JCORE_WARN("[Image-IO] Warning: Unsupported image format '{0}'!", Enum::nameOf(format));
                     return false;
                 case DataFormat::FMT_PNG:
                     return Png::decode(stream, imgData, params);
@@ -2001,14 +2001,14 @@ namespace JCore {
             if (fs.open("wb")) {
                 return tryEncode(fs, imgData, format, encodeParams);
             }
-            JCORE_ERROR("[Image-IO] ({1}) Encode Error: Failed to open file '{0}' for writing!", path, EnumNames<DataFormat>::getEnumName(format));
+            JCORE_ERROR("[Image-IO] ({1}) Encode Error: Failed to open file '{0}' for writing!", path, Enum::nameOf(format));
             return false;
         }
 
         bool tryEncode(const Stream& stream, const ImageData& imgData, DataFormat format, const ImageEncodeParams& encodeParams) {
             switch (format) {
                 default:
-                    JCORE_WARN("[Image-IO] Warning: Given encoding format is unsupported! ({0})", EnumNames<DataFormat>::getEnumName(format));
+                    JCORE_WARN("[Image-IO] Warning: Given encoding format is unsupported! ({0})", Enum::nameOf(format));
                     return false;
 
                 case JCore::FMT_PNG:

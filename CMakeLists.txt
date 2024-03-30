@@ -166,6 +166,7 @@ source_group("J-Core/Util" FILES ${JCORE_MAIN_SRC})
 list(APPEND JCORE_GUI_SOURCES ${JCORE_MAIN_SRC})
 
 set(JCORE_MAIN_SRC
+	"include/J-Core/Gui/ImGui.h"
 	"include/J-Core/Gui/IGuiDrawable.h"
 	"include/J-Core/Gui/IGuiExtras.h"
 	"src/J-Core/Gui/IGuiExtras.cpp"

@@ -1,8 +1,8 @@
 #pragma once
+#include <J-Core/Gui/ImGui.h>
 #include <cstdint>
 #include <string>
 #include <J-Core/Rendering/Renderer.h>
-#include <imgui.h>
 #include <J-Core/Log.h>
 #include <J-Core/Util/EnumUtils.h>
 

@@ -1,5 +1,5 @@
 #pragma once
-#include <imgui.h>
+#include <J-Core/Gui/ImGui.h>
 #include <string>
 
 namespace JCore {

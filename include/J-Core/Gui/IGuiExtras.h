@@ -1,11 +1,7 @@
 #pragma once
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include <J-Core/Log.h>
 #include <J-Core/Gui/IGuiDrawable.h>
-#include <imgui.h>
-#include <imgui_internal.h>
-#include <misc/cpp/imgui_stdlib.h>
 #include <J-Core/Util/EnumUtils.h>
+#include <J-Core/Log.h>
 #include <glm.hpp>
 #include <J-Core/Rendering/Texture.h>
 #include <J-Core/Util/StringUtils.h>
@@ -78,6 +74,11 @@ bool JCore::IGuiDrawable<glm::vec4>::onGui(const char* label, glm::vec4& object,
     return changed;
 }
 
+
+namespace ImGui {
+    bool CollapsingHeaderNoId(ImStrv label, ImStrv id, bool* p_visible = nullptr, ImGuiTreeNodeFlags flags = 0);
+}
+
 namespace JCore::Gui {
     namespace detail {
         static constexpr std::string_view DEFAULT_BIT_NAMES[64]{
@@ -107,7 +108,7 @@ namespace JCore::Gui {
     bool searchDialogCenter(const char* label, uint8_t flags, std::string& path, const char* types = nullptr, size_t defaultType = 1);
     bool searchDialogLeft(const char* label, uint8_t flags, std::string& path, const char* types = nullptr, size_t defaultType = 1);
 
-    bool drawBitMask(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, JCore::Enum::GetEnumName nameFunc, bool allowMultiple = true, bool displayAll = true);
+    bool drawBitMask_Raw(std::string_view label, void* value, size_t size, uint64_t start, uint64_t length, Enum::GetEnumName nameFunc, bool allowMultiple = true, bool displayAll = true);
 
     template<typename T, typename STR>
     bool drawBitMask(std::string_view label, T& value, uint64_t start, uint64_t length, const STR* names, bool allowMultiple = true, bool displayAll = true) {
@@ -116,16 +117,16 @@ namespace JCore::Gui {
 
         static constexpr uint64_t BITS = (sizeof(T) << 3);
         JCORE_ASSERT(BITS >= start, "Given start bit is higher than total number of bits!");
-
-        return drawBitMask(label, &value, sizeof(T), start, length,
+        return drawBitMask_Raw(
+            label, &value, sizeof(T), 
+            start, length,
             [names, &start](const void* ptr)
             {
                 uint64_t index = 0;
-                JE_COPY(&index, ptr, Math::min(sizeof(T), sizeof(uint64_t)));
+                memcpy(&index, ptr, Math::min(sizeof(T), sizeof(uint64_t)));
                 return std::string_view{ names[Math::log2(index) - start] };
-            });
+            }, allowMultiple, displayAll);;
     }
-
 
     template<typename T, size_t ID = 0>
     bool drawBitMask(std::string_view label, T& value, bool allowMultiple = true, bool displayAll = true) {
@@ -155,13 +156,13 @@ namespace JCore::Gui {
     }
 
     template<typename T, size_t type = 0>
-    bool drawEnumList(const char* label, T& value, bool allowSearch = false, bool ignoreNoDraw = false) {
-        static constexpr int64_t OFFSET = (EnumNames<T, type>::Start < 0 ? -EnumNames<T, type>::Start : 0);
-        int32_t valueI = int32_t(value) + OFFSET;
+    bool drawEnumList(std::string_view label, T& value, bool allowSearch = false, bool ignoreNoDraw = false) {
+        size_t valueI = 0;
+        memcpy(&valueI, &value, Math::min(sizeof(T), sizeof(size_t)));
         bool changed = false;
 
-        changed = EnumNames<T, type>::getNextValidIndex(valueI, ignoreNoDraw);
-        auto values = EnumNames<T, type>::getEnumNames();
+        changed = Enum::nextValidIndex<T, type>(valueI, ignoreNoDraw);
+        const std::string_view* values = EnumInfo<T, type>::Names;
 
         static char buffer[257]{ 0 };
 
@@ -174,7 +175,7 @@ namespace JCore::Gui {
             float filter = avail - rest;
 
             ImGui::PushItemWidth(filter * 0.5f);
-            ImGui::Text(label);
+            ImGui::Text("%.*s", int32_t(label.length()), label.data());
             ImGui::SameLine();
 
             ImGui::InputTextWithHint("##Filter", "Filter", buffer, 256);
@@ -190,8 +191,8 @@ namespace JCore::Gui {
 
         if (combo) {
  
-            for (int32_t i = 0; i < EnumNames<T, type>::Count; i++) {
-                if (EnumNames<T, type>::noDraw(i) || (buffer[0] != 0 && (allowSearch && !Utils::strIContains(values[i], buffer)))) { continue; }
+            for (size_t i = 0; i < EnumInfo<T, type>::Count; i++) {
+                if (Enum::isNoDraw<T, type>(i) || (buffer[0] != 0 && (allowSearch && !Utils::strIContains(values[i], buffer)))) { continue; }
                 const bool selected = i == valueI;
 
                 ImGui::PushID(i);
@@ -209,7 +210,7 @@ namespace JCore::Gui {
         ImGui::PopID();
 
         if (changed) {
-            value = T(valueI - OFFSET);
+            memcpy(&value, &valueI, Math::min(sizeof(T), sizeof(size_t)));
             return true;
         }
         return false;
@@ -218,9 +219,9 @@ namespace JCore::Gui {
     bool drawSplitter(bool splitVertical, float thickness, float* size0, float* size1, float minSize0, float minSize1, float splitterAxisSize = -1.0f);
     bool drawSplitter(const char* id, bool splitVertical, float thickness, float* size0, float* size1, float minSize0, float minSize1, float splitterAxisSize = -1.0f);
 
-    void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f);
-    void drawTexture(std::shared_ptr<Texture>& texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f, const glm::vec2& uvMin = { 0, 0 }, const glm::vec2& uvMax = { 1, 1 }, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr);
-    void drawTexture(const Texture* texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect, float edge = 0.1f, const glm::vec2& uvMin = { 0, 0 }, const glm::vec2& uvMax = { 1, 1 }, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr);
+    void drawTexture(uint32_t texture, int32_t width, int32_t height, float sizeX, float sizeY, bool keepAspect = true, float edge = 0.1f, int8_t mipLevel = -1);
+    void drawTexture(std::shared_ptr<Texture> texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect = true, float edge = 0.1f, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr, int8_t* mipLevel = nullptr);
+    void drawTexture(const Texture* texture, uint32_t flags, float sizeX, float sizeY, bool keepAspect = true, float edge = 0.1f, uint8_t* extraFlags = nullptr, uint64_t* overrideId = nullptr, uint32_t* overrideHash = nullptr, Color32* bgColor = nullptr, int8_t* mipLevel = nullptr);
 
 
     bool drawProgressBar(const char* label, float value, const ImVec2& size_arg, const ImU32& bg_col, const ImU32& fg_col, const ImU32& hi_col_lhs);
