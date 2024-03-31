@@ -2,7 +2,7 @@
 #include <J-Core/IO/IOUtils.h>
 #include <J-Core/Gui/IGuiExtras.h>
 #include <J-Core/IO/Image.h>
-#include <J-Core/ThreadManager.h>
+#include <J-Core/TaskManager.h>
 #include <windows.h>
 #include <J-Core/IO/MemoryStream.h>
 
@@ -24,9 +24,9 @@ namespace JCore {
         if (_renderer.initialize(_specs.name.c_str(), 1280, 720, getIconID())) {
             _instance = this;
             Window::setAllowFileDrop(true);
+            TaskManager::init();
             setupStyles();
             start();
-
             return true;
         }
 
@@ -37,7 +37,7 @@ namespace JCore {
     void Application::run() {
         while (true) {
             updateTexGen();
-            TaskManager::updateTask();
+            TaskManager::updateTasks();
 
             if (!_renderer.update()) 
             { 
@@ -52,6 +52,7 @@ namespace JCore {
     void Application::close() {
         stop();
         _renderer.release();
+        TaskManager::deinit();
     }
 
     void Application::initFont(const wchar_t* charset, std::string_view fontpath) {
@@ -117,43 +118,47 @@ namespace JCore {
         setStyle(0);
     }
 
-    static float calculateTaskWindowHeight(const TaskProgress& progress) {
-        float h = 17;
+    static float calculateStateHeight(const TaskProgress::State& state) {
         static constexpr float SEPARATOR_SIZE = 4;
         static constexpr float TEXT_SIZE = 34;
         static constexpr float BAR_SIZE = 16;
-
-        if (progress.message[0]) {
-            h += TEXT_SIZE + SEPARATOR_SIZE;
-        }
-        h += BAR_SIZE;
-
-        if (progress.flags & TaskProgress::HAS_SUB_TASK) {
-            if (progress.subMessage[0]) {
-                h += TEXT_SIZE + SEPARATOR_SIZE;
+        float height = 0;
+        if (state.users) {
+            if (!Utils::isWhiteSpace(state.message)) {
+                height += TEXT_SIZE * 2 + SEPARATOR_SIZE;
             }
-            h += BAR_SIZE + SEPARATOR_SIZE;
+            height += BAR_SIZE + SEPARATOR_SIZE;
         }
-        return h + 12 + ImGui::GetFrameHeight();
+        return height;
     }
 
-    static void drawTaskWindow(const TaskProgress& tProg, std::shared_ptr<Texture> preview) {
-        float progM = tProg.getProgress();
-        float progS = tProg.subProgress.getNormalized();
-        auto& io = ImGui::GetIO();
-        bool isCancelled = TaskManager::isCancelling();
+    static float calculateTaskWindowHeight(float baseHeight, const std::vector<TaskProgress::State>& states, bool hasButtons) {
+        float h = baseHeight + (hasButtons ? ImGui::GetFrameHeight() : 0);
+        for (size_t i = 0; i < states.size(); i++) {
+            h += calculateStateHeight(states[i]);
+        }
+        return h;
+    }
 
-        float height = calculateTaskWindowHeight(tProg);
+    static void drawTaskWindow(const Task& task) {
+        auto& io = ImGui::GetIO();
+        bool isCancelled = TaskManager::isCanceling();
+        auto& prog = task.progress;
+
+        bool canCancel  = TaskManager::canCancel();
+        bool canSkip    = TaskManager::canSkip();
+        std::shared_ptr<Texture> preview = TaskManager::getPreview();
+
+        float height = calculateTaskWindowHeight(48, prog.subStates, canCancel || canSkip);
         bool showTex = preview && preview->isValid();
 
         float wRatio = showTex ? (preview->getWidth() / float(preview->getHeight())) : 1.0f;
-
         float texW = showTex ? height * wRatio : 0;
         float winBase = 450;
 
         ImGui::SetNextWindowSize({ winBase, height }, 0);
         ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::Begin("Task Progress##Task", 0, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings);
+        ImGui::Begin("Task Progress##Task", 0, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollWithMouse);
 
         const ImU32 col = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
         const ImU32 bg = ImGui::GetColorU32(ImGuiCol_Button);
@@ -161,56 +166,49 @@ namespace JCore {
 
         float x = ImGui::GetCursorPosX();
         float y = ImGui::GetCursorPosY();
-        ImGui::Text(isCancelled ? "Cancelling... [%s]" : "[%s]", tProg.title.c_str());
+        ImGui::Text(isCancelled ? "Canceling... [%s]" : "[%s]", prog.title.c_str());
         Gui::drawProgressSpinner("##SpinnerTask", 12, 4, col);
 
-        if (tProg.message.length() > 1) {
+        float percent = float(prog.getPercent(0));
+        if (!Utils::isWhiteSpace(prog.main.message)) {
             ImGui::SameLine();
-
-            if (tProg.progress.isRange() && (tProg.progress.type[0] & PROG_ShowRange)) {
-                if (tProg.progress.isFloat()) {
-                    ImGui::Text("%s\n(%.2f %% Done) [%zi/%zi]", tProg.message.c_str(), progM * 100.0f, tProg.progress.getValueI(0), tProg.progress.getValueI(1));
-                }
-                else {
-                    ImGui::Text("%s\n(%.2f %% Done) [%.0f/%.0f]", tProg.message.c_str(), progM * 100.0f, tProg.progress.getValueF(0), tProg.progress.getValueF(1));
-                }
-            }
-            else {
-                ImGui::Text("%s\n(%.2f %% Done)", tProg.message.c_str(), progM * 100.0f);
-            }
-
+            ImGui::Text("%s\n(%.2f %% Done)", prog.main.message.c_str(), percent * 100.0f);
             ImGui::Separator();
         }
-        Gui::drawProgressBar("##ProgressTask", progM, { 450, 12 }, bg, col, hiLhs);
+        Gui::drawProgressBar("##ProgressTask", percent, { 450, 12 }, bg, col, hiLhs);
 
-        if (tProg.flags & TaskProgress::HAS_SUB_TASK) {
-            if (tProg.subMessage.length() > 0) {
-                ImGui::SetCursorPosX(x);
-                ImGui::Separator();
-                if (tProg.subProgress.isRange() && (tProg.subProgress.type[0] & PROG_ShowRange)) {
-                    if (tProg.subProgress.isFloat()) {
-                        ImGui::Text("%s\n(%.2f %% Done) [%i/%i]", tProg.subMessage.c_str(), progS * 100.0f, tProg.subProgress.getValueI(0), tProg.subProgress.getValueI(1));
-                    }
-                    else {
-                        ImGui::Text("%s\n(%.2f %% Done) [%.0f/%.0f]", tProg.subMessage.c_str(), progS * 100.0f, tProg.subProgress.getValueF(0), tProg.subProgress.getValueF(1));
-                    }
-                }
-                else {
-                    ImGui::Text("%s\n(%.2f %% Done)", tProg.subMessage.c_str(), progS * 100.0f);
-                }
+        int32_t count = 0;
+        for (auto& state : prog.subStates) {
+            if (state.users == 0) { 
+                count++;
+                continue; 
             }
+
             ImGui::Separator();
-            Gui::drawProgressBar("##ProgressTaskSub", progS, { 450, 12 }, bg, col, hiLhs);
+            ImGui::PushID(count++);
+            percent = float(prog.getPercent(uint8_t(count)));
+            if (!Utils::isWhiteSpace(state.message)) {
+                ImGui::SetCursorPosX(x);
+                ImGui::Text("%s\n(%.2f %% Done)", state.message.c_str(), percent * 100.0f);
+                ImGui::Separator();
+            }
+            Gui::drawProgressBar("##ProgressTask", percent, { 450, 12 }, bg, col, hiLhs);
+            ImGui::PopID();
         }
 
         ImGui::BeginDisabled(isCancelled);
-        if (ImGui::Button("Cancel")) {
-            TaskManager::cancelCurTask();
+        if (canCancel) {
+            if (ImGui::Button("Cancel")) {
+                TaskManager::cancelCurrentTask();
+            }
+            ImGui::SameLine();
         }
-        ImGui::SameLine();
         ImGui::BeginDisabled(TaskManager::isSkipping());
-        if (ImGui::Button("Skip")) {
-            TaskManager::markForSkip();
+
+        if (canSkip) {
+            if (ImGui::Button("Skip")) {
+                TaskManager::markSkipForTask();
+            }
         }
         ImGui::EndDisabled();
         ImGui::EndDisabled();
@@ -228,14 +226,14 @@ namespace JCore {
     }
 
     bool Application::tryQuit() {
-        if (_quitting && TaskManager::getCurrentTask().isRunning()) {
+        if (_quitting && TaskManager::isRunning()) {
             JCORE_WARN("Waiting on the current task to cancel...");
             return false;
         }
 
-        if (TaskManager::getCurrentTask().isRunning()) {
+        if (TaskManager::isRunning()) {
             JCORE_WARN("Waiting on the current task to cancel...");
-            TaskManager::cancelCurTask();
+            TaskManager::cancelCurrentTask();
             _quitting = true;
             return false;
         }
@@ -243,13 +241,12 @@ namespace JCore {
     }
 
     bool Application::isQuitting() const { return _quitting; }
-    bool Application::canQuit() const { return !TaskManager::getCurrentTask().isRunning(); }
+    bool Application::canQuit() const { return !TaskManager::isRunning(); }
 
     void Application::doGui() {
         ImGui::BeginDisabled(_quitting);
-        auto& task = TaskManager::getCurrentTask();
-        if (task.isRunning()) {
-            drawTaskWindow(TaskManager::getProgress(), task.showPreview ? task.previewTex : nullptr);
+        if (TaskManager::isRunning()) {
+            drawTaskWindow(TaskManager::get()->getTask());
         }
         ImGui::EndDisabled();
     }

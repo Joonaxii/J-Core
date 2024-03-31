@@ -194,7 +194,7 @@ namespace JCore::Gui {
                 if (Utils::isWhiteSpace(cur) || (buffer[0] != 0 && (allowSearch && !Utils::strIContains(cur, buffer)))) { continue; }
                 const bool selected = j == valueI;
 
-                ImGui::PushID(j);
+                ImGui::PushID(int32_t(j));
                 if (ImGui::Selectable(cur, selected)) {
                     changed = true;
                     valueI = j;

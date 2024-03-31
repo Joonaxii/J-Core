@@ -1,11 +1,11 @@
 #pragma once
 #include <cstdint>
-#include <functional>
 #include <J-Core/Math/Color24.h>
 #include <J-Core/Math/Color32.h>
 #include <J-Core/Math/Color555.h>
 #include <J-Core/Math/Color565.h>
 #include <J-Core/Math/Color4444.h>
+#include <J-Core/Util/DataUtils.h>
 #include <J-Core/Math/Math.h>
 #include <unordered_map>
 #include <glm.hpp>
@@ -13,7 +13,7 @@
 
 namespace JCore {
     template<typename T>
-    using PixelConvert = std::function<void(const uint8_t*, const uint8_t*, T*)>;
+    using PixelConvert = void(*)(const uint8_t*, const uint8_t*, T&);
 
     enum class TextureFormat : uint8_t {
         Unknown,
@@ -311,91 +311,86 @@ namespace JCore {
 
     template<>
     inline void convertPixel<Color32>(TextureFormat format, const uint8_t* dataStart, const uint8_t* data, Color32& output) {
-        static PixelConvert<Color32> converts[int32_t(TextureFormat::Count)] {
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //Unknown
-                    *output = Color32::Clear;
-               },                                               
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //R8
-                    memset(output, data[0], 3);
-                    output->a = 0xFF;
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //RGB24
-                    memcpy(output, data, 3);
-                    output->a = 0xFF;
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //RGB48
-                    const uint16_t* dataUI = reinterpret_cast<const uint16_t*>(data);
-                    output->r = remapUI16ToUI8(*dataUI++);
-                    output->g = remapUI16ToUI8(*dataUI++);
-                    output->b = remapUI16ToUI8(*dataUI++);
-                    output->a = 0xFF;
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //RGBA32
-                    memcpy(output, data, 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //RGBA64
-                    const uint16_t* dataUI = reinterpret_cast<const uint16_t*>(data);
-                    output->r = remapUI16ToUI8(*dataUI++);
-                    output->g = remapUI16ToUI8(*dataUI++);
-                    output->b = remapUI16ToUI8(*dataUI++);
-                    output->a = remapUI16ToUI8(*dataUI++);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //Indexed8
-                    memcpy(output, (dataStart + (size_t(*data) << 2)), 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //Indexed16
-                    memcpy(output, (dataStart + ((size_t(data[0]) | size_t(data[1]) << 8) << 2)), 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color32* output) {      //RGBA4444
-                    *output = Color32(*reinterpret_cast<const Color4444*>(data));
-               }
-        };
-
-        int32_t fmt = int32_t(format);
-        if (fmt < 0 || format >= TextureFormat::Count) { output = Color32::Clear; return; }
-        converts[fmt](dataStart, data, &output);
+        switch (format) {
+            case TextureFormat::R8:
+                memset(&output, data[0], 3);
+                output.a = 0xFF;
+                return;
+            case TextureFormat::RGB24:
+                memcpy(&output, data, 3);
+                output.a = 0xFF;
+                return;
+            case TextureFormat::RGBA32:
+                memcpy(&output, data, 4);
+                return;
+            case TextureFormat::RGB48: {
+                const uint16_t* dataUI = reinterpret_cast<const uint16_t*>(data);
+                output.r = remapUI16ToUI8(dataUI[0]);
+                output.g = remapUI16ToUI8(dataUI[1]);
+                output.b = remapUI16ToUI8(dataUI[2]);
+                output.a = 0xFF;
+                return;
+            }
+            case TextureFormat::RGBA64: {
+                const uint16_t* dataUI = reinterpret_cast<const uint16_t*>(data);
+                output.r = remapUI16ToUI8(dataUI[0]);
+                output.g = remapUI16ToUI8(dataUI[1]);
+                output.b = remapUI16ToUI8(dataUI[2]);
+                output.a = remapUI16ToUI8(dataUI[3]);
+                return;
+            }
+            case TextureFormat::Indexed8:
+                output = *reinterpret_cast<const Color32*>((dataStart + (size_t(*data) << 2)));
+                break;
+            case TextureFormat::Indexed16:
+                output = *reinterpret_cast<const Color32*>((dataStart + (size_t(*reinterpret_cast<const uint16_t*>(data)) << 2)));
+                break;
+            case TextureFormat::RGBA4444:
+                output = *reinterpret_cast<const Color4444*>(data);
+                break;
+        }
     }
 
-    template<>
-    inline void convertPixel<Color4444>(TextureFormat format, const uint8_t* dataStart, const uint8_t* data, Color4444& output) {
-        static PixelConvert<Color4444> converts[int32_t(TextureFormat::Count)]{
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Unknown
-                    *output = Color4444();
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //R8
-                    *output = Color4444(data[0] >> 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGB24
-                   *output = Color4444(data[0] >> 4, data[1] >> 4, data[2] >> 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGB48
-                   const uint16_t* pix = reinterpret_cast<const uint16_t*>(data);
-                    *output = Color4444(pix[0] >> 12, pix[1] >> 12, pix[2] >> 12);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA32
-                    *output = Color4444(data[0] >> 4, data[1] >> 4, data[2] >> 4, data[3] >> 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA64
-                   const uint16_t* pix = reinterpret_cast<const uint16_t*>(data);
-                    *output = Color4444(pix[0] >> 12, pix[1] >> 12, pix[2] >> 12, pix[3] >> 12);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Indexed8
-                    const uint8_t* pix = (dataStart + (size_t(*data) << 2));
-                    *output = Color4444(pix[0] >> 4, pix[1] >> 4, pix[2] >> 4, pix[3] >> 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Indexed16
-                    const uint8_t* pix = (dataStart + ((size_t(data[0]) | size_t(data[1]) << 8) << 2));
-                    *output = Color4444(pix[0] >> 4, pix[1] >> 4, pix[2] >> 4, pix[3] >> 4);
-               },
-               [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA4444
-                    memcpy(output, data, 2);
-               }
-        };
+    //template<>
+    //inline void convertPixel<Color4444>(TextureFormat format, const uint8_t* dataStart, const uint8_t* data, Color4444& output) {
+    //    static PixelConvert<Color4444> converts[int32_t(TextureFormat::Count)]{
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Unknown
+    //                *output = Color4444();
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //R8
+    //                *output = Color4444(data[0] >> 4);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGB24
+    //               *output = Color4444(data[0] >> 4, data[1] >> 4, data[2] >> 4);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGB48
+    //               const uint16_t* pix = reinterpret_cast<const uint16_t*>(data);
+    //                *output = Color4444(pix[0] >> 12, pix[1] >> 12, pix[2] >> 12);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA32
+    //                *output = Color4444(data[0] >> 4, data[1] >> 4, data[2] >> 4, data[3] >> 4);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA64
+    //               const uint16_t* pix = reinterpret_cast<const uint16_t*>(data);
+    //                *output = Color4444(pix[0] >> 12, pix[1] >> 12, pix[2] >> 12, pix[3] >> 12);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Indexed8
+    //                const uint8_t* pix = (dataStart + (size_t(*data) << 2));
+    //                *output = Color4444(pix[0] >> 4, pix[1] >> 4, pix[2] >> 4, pix[3] >> 4);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //Indexed16
+    //                const uint8_t* pix = (dataStart + ((size_t(data[0]) | size_t(data[1]) << 8) << 2));
+    //                *output = Color4444(pix[0] >> 4, pix[1] >> 4, pix[2] >> 4, pix[3] >> 4);
+    //           },
+    //           [](const uint8_t* dataStart, const uint8_t* data, Color4444* output) {      //RGBA4444
+    //                memcpy(output, data, 2);
+    //           }
+    //    };
 
-        int32_t fmt = int32_t(format);
-        if (fmt < 0 || format >= TextureFormat::Count) { output = Color4444(); return; }
-        converts[fmt](dataStart, data, &output);
-    }
+    //    int32_t fmt = int32_t(format);
+    //    if (fmt < 0 || format >= TextureFormat::Count) { output = Color4444(); return; }
+    //    converts[fmt](dataStart, data, &output);
+    //}
 
     enum : uint8_t {
         IMG_FLAG_HAS_ALPHA = 0x1,
@@ -525,6 +520,20 @@ namespace JCore {
                 memset(data, 0, required);
             }
             return data != nullptr;
+        }
+
+        bool copyFrom(const ImageData& other) {
+            if (doAllocate(other.width, other.height, other.format, other.paletteSize, other.isAligned())) {
+                size_t size = getSize();
+                if (other.data) {
+                    memcpy(data, other.data, size);
+                }
+                else {
+                    memset(data, 0, size);
+                }
+                return true;
+            }
+            return false;
         }
 
         bool doAllocate(size_t size, bool clear = true) {

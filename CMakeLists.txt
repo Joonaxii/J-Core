@@ -12,6 +12,8 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_WARNINGS OFF CACHE BOOL "" FORCE)
+set(ZLIB_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(ZLIB_COMPAT ON CACHE BOOL "" FORCE)
 
 set(JCORE_GUI_SOURCES )
 
@@ -19,10 +21,11 @@ add_subdirectory("ext/glm")
 add_subdirectory("ext/imgui")
 add_subdirectory("ext/spdlog")
 add_subdirectory("ext/json")
-add_subdirectory("ext/zlib")
+add_subdirectory("ext/zlib-ng")
 add_subdirectory("ext/glfw-3.3.8")
 
 add_compile_definitions(GLEW_STATIC)
+add_compile_definitions(_SILENCE_ALL_MS_EXT_DEPRECATION_WARNINGS)
 IF (WIN32)
 	add_compile_definitions(WIN32_LEAN_AND_MEAN)
 	add_compile_definitions(NOMINMAX)
@@ -30,7 +33,12 @@ ENDIF(WIN32)
 
 target_compile_options(
     spdlog PRIVATE
-    /external:W0
+    /external:W0 /W0
+)
+
+target_compile_options(
+    ImGUI PRIVATE
+    /external:W0 /W0
 )
 
 # OpenGL Glew files
@@ -47,8 +55,8 @@ set(JCORE_MAIN_SRC
 	"include/J-Core/Application.h"
 	"src/J-Core/Application.cpp"
 	
-	"include/J-Core/ThreadManager.h"
-	"src/J-Core/ThreadManager.cpp"
+	"include/J-Core/TaskManager.h"
+	"src/J-Core/TaskManager.cpp"
 	
 	"include/J-Core/Log.h"
 	"src/J-Core/Log.cpp"
@@ -206,16 +214,13 @@ find_package(OpenGL REQUIRED)
 add_library(J-Core STATIC ${JCORE_GUI_SOURCES})
 target_link_libraries(J-Core OpenGL::GL glfw ImGUI glm zlibstatic spdlog nlohmann_json)
 
-
 target_compile_options(
     J-Core PUBLIC
     /external:W0
 )
 
-target_include_directories(J-Core PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/ext/zlib)
-
 include_directories("include")
-include_directories("ext/zlib/")
+include_directories("ext/zlib-ng/")
 include_directories("ext/glm/glm")
 include_directories("ext/imgui")
 include_directories("ext/json/include")

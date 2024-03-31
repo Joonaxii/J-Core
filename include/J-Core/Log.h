@@ -5,6 +5,8 @@
 #include <spdlog/fmt/ostr.h>
 #pragma warning(pop)
 
+#define STR(X) #X
+
 namespace JCore {
     class Log {
     public:

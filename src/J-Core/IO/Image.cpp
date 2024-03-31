@@ -454,6 +454,8 @@ namespace JCore {
 
 #pragma pack(pop, 1)
 
+        typedef void(*ReverseFilter)(uint8_t*, uint8_t*, int32_t, uint8_t);
+
         static bool calculateDiff(const uint8_t* data, size_t width, size_t bpp, uint64_t& current) {
             uint64_t curVal = 0;
             uint64_t buf = 0;
@@ -467,13 +469,31 @@ namespace JCore {
         }
 
         static int32_t paethPredictor(int32_t a, int32_t b, int32_t c) {
-            int32_t p = a + b - c;
-            int32_t pA = std::abs(p - a);
-            int32_t pB = std::abs(p - b);
-            int32_t pC = std::abs(p - c);
 
-            if (pA <= pB && pA <= pC) { return a; }
-            return pB <= pC ? b : c;
+            int32_t p = a + b - c;
+            int32_t pA = Math::abs(p - a);
+            int32_t pB = Math::abs(p - b);
+            int32_t pC = Math::abs(p - c);
+
+            switch (int32_t(pA <= pB) | (int32_t(pA <= pC) << 1) | (int32_t(pB <= pC) << 2))
+            {
+                 default: return c;
+                 case  1: return c;
+                 case  2: return c;
+                 case  3: return a;
+                 case  4: return b;
+                 case  5: return b;
+                 case  6: return b;
+                 case  7: return a;
+            }
+
+           //int32_t p = a + b - c;
+           //int32_t pA = Math::abs(p - a);
+           //int32_t pB = Math::abs(p - b);
+           //int32_t pC = Math::abs(p - c);
+           //
+           //if (pA <= pB && pA <= pC) { return a; }
+           //return pB <= pC ? b : c;
         }
 
         static void applyFilter(Span<uint8_t>& current, Span<uint8_t>& prior, Span<uint8_t>& target, int32_t width, int32_t bpp, uint8_t filter) {
@@ -507,6 +527,332 @@ namespace JCore {
             }
         }
 
+        static void reverseFilter_8(uint8_t* current, uint8_t* prior, int32_t width, uint8_t filter) {
+            uint8_t* tempA = current - 1;
+            uint8_t* tempB = prior - 1;
+            switch (filter)
+            {
+            case 1: //Sub
+                for (int32_t x = 0; x < width; x++) {
+                    *current = uint8_t(*current + *tempA);
+
+                    ++current;
+                    ++tempA;
+                }
+                break;
+            case 2: //Up
+                for (int32_t x = 0; x < width; x++) {
+                    *current = uint8_t(*current + *prior);
+                    ++current;
+                    ++prior;
+                }
+                break;
+            case 3: //Average
+                for (int32_t x = 0; x < width; x++) {
+                    *current = uint8_t(*current + ((*prior + *tempA) >> 1));
+
+                    ++current;
+                    ++tempA;
+                    ++prior;
+                }
+                break;
+            case 4: //Paeth
+                for (int32_t x = 0; x < width; x++) {
+                    *current = uint8_t(*current + paethPredictor(*tempA, *prior, *tempB));
+
+                    ++current;
+                    ++tempA;
+                    ++tempB;
+                    ++prior;
+                }
+                break;
+            }
+        }
+        static void reverseFilter_16(uint8_t* current, uint8_t* prior, int32_t width, uint8_t filter) {
+            uint8_t* tempA = current - 2;
+            uint8_t* tempB = prior - 2;
+            switch (filter)
+            {
+                case 1: //Sub
+                    for (int32_t x = 0; x < width; x++) {
+                        current[0] = uint8_t(current[0] + tempA[0]);
+                        current[1] = uint8_t(current[1] + tempA[1]);
+
+                        current += 2;
+                        tempA += 2;
+                    }
+                    break;
+                case 2: //Up
+                    for (int32_t x = 0; x < width; x++) {
+                        current[0] = uint8_t(current[0] + prior[0]);
+                        current[1] = uint8_t(current[1] + prior[1]);
+
+                        current += 2;
+                        prior += 2;
+                    }
+                    break;
+                case 3: //Average
+                    for (int32_t x = 0; x < width; x++) {
+                        current[0] = uint8_t(current[0] + ((prior[0] + tempA[0]) >> 1));
+                        current[1] = uint8_t(current[1] + ((prior[1] + tempA[1]) >> 1));
+
+                        current += 2;
+                        prior += 2;
+                        tempA += 2;
+                    }
+                    break;
+                case 4: //Paeth
+                    for (int32_t x = 0; x < width; x++) {
+                        current[0] = uint8_t(current[0] + paethPredictor(tempA[0], prior[0], tempB[0]));
+                        current[1] = uint8_t(current[1] + paethPredictor(tempA[1], prior[1], tempB[1]));
+
+                        current += 2;
+                        prior += 2;
+                        tempA += 2;
+                        tempB += 2;
+                    }
+                    break;
+            }
+        }
+
+        static void reverseFilter_24(uint8_t* current, uint8_t* prior, int32_t width, uint8_t filter) {
+            uint8_t* tempA = current - 3;
+            uint8_t* tempB = prior - 3;
+            switch (filter)
+            {
+            case 1: //Sub
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + tempA[0]);
+                    current[1] = uint8_t(current[1] + tempA[1]);
+                    current[2] = uint8_t(current[2] + tempA[2]);
+
+                    current += 3;
+                    tempA += 3;
+                }
+                break;
+            case 2: //Up
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + prior[0]);
+                    current[1] = uint8_t(current[1] + prior[1]);
+                    current[2] = uint8_t(current[2] + prior[2]);
+
+                    current += 3;
+                    prior += 3;
+                }
+                break;
+            case 3: //Average
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + ((prior[0] + tempA[0]) >> 1));
+                    current[1] = uint8_t(current[1] + ((prior[1] + tempA[1]) >> 1));
+                    current[2] = uint8_t(current[2] + ((prior[2] + tempA[2]) >> 1));
+
+                    current += 3;
+                    prior += 3;
+                    tempA += 3;
+                }
+                break;
+            case 4: //Paeth
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + paethPredictor(tempA[0], prior[0], tempB[0]));
+                    current[1] = uint8_t(current[1] + paethPredictor(tempA[1], prior[1], tempB[1]));
+                    current[2] = uint8_t(current[2] + paethPredictor(tempA[2], prior[2], tempB[2]));
+
+                    current += 3;
+                    prior += 3;
+                    tempA += 3;
+                    tempB += 3;
+                }
+                break;
+            }
+        }
+        static void reverseFilter_32(uint8_t* current, uint8_t* prior, int32_t width, uint8_t filter) {
+            uint8_t* tempA = current - 4;
+            uint8_t* tempB = prior - 4;
+            switch (filter)
+            {
+            case 1: //Sub
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + tempA[0]);
+                    current[1] = uint8_t(current[1] + tempA[1]);
+                    current[2] = uint8_t(current[2] + tempA[2]);
+                    current[3] = uint8_t(current[3] + tempA[3]);
+
+                    current += 4;
+                    tempA += 4;
+                }
+                break;
+            case 2: //Up
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + prior[0]);
+                    current[1] = uint8_t(current[1] + prior[1]);
+                    current[2] = uint8_t(current[2] + prior[2]);
+                    current[3] = uint8_t(current[3] + prior[3]);
+
+                    current += 4;
+                    prior += 4;
+                }
+                break;
+            case 3: //Average
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + ((prior[0] + tempA[0]) >> 1));
+                    current[1] = uint8_t(current[1] + ((prior[1] + tempA[1]) >> 1));
+                    current[2] = uint8_t(current[2] + ((prior[2] + tempA[2]) >> 1));
+                    current[3] = uint8_t(current[3] + ((prior[3] + tempA[3]) >> 1));
+
+                    current += 4;
+                    prior += 4;
+                    tempA += 4;
+                }
+                break;
+            case 4: //Paeth
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + paethPredictor(tempA[0], prior[0], tempB[0]));
+                    current[1] = uint8_t(current[1] + paethPredictor(tempA[1], prior[1], tempB[1]));
+                    current[2] = uint8_t(current[2] + paethPredictor(tempA[2], prior[2], tempB[2]));
+                    current[3] = uint8_t(current[3] + paethPredictor(tempA[3], prior[3], tempB[3]));
+
+                    current += 4;
+                    prior += 4;
+                    tempA += 4;
+                    tempB += 4;
+                }
+                break;
+            }
+        }
+
+        static void reverseFilter_48(uint8_t* current, uint8_t* prior, int32_t width, uint8_t filter) {
+            uint8_t* tempA = current - 6;
+            uint8_t* tempB = prior - 6;
+            switch (filter)
+            {
+            case 1: //Sub
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + tempA[0]);
+                    current[1] = uint8_t(current[1] + tempA[1]);
+                    current[2] = uint8_t(current[2] + tempA[2]);
+                    current[3] = uint8_t(current[3] + tempA[3]);
+                    current[4] = uint8_t(current[4] + tempA[4]);
+                    current[5] = uint8_t(current[5] + tempA[5]);
+
+                    current += 6;
+                    tempA += 6;
+                }
+                break;
+            case 2: //Up
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + prior[0]);
+                    current[1] = uint8_t(current[1] + prior[1]);
+                    current[2] = uint8_t(current[2] + prior[2]);
+                    current[3] = uint8_t(current[3] + prior[3]);
+                    current[4] = uint8_t(current[4] + prior[4]);
+                    current[5] = uint8_t(current[5] + prior[5]);
+
+                    current += 6;
+                    prior += 6;
+                }
+                break;
+            case 3: //Average
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + ((prior[0] + tempA[0]) >> 1));
+                    current[1] = uint8_t(current[1] + ((prior[1] + tempA[1]) >> 1));
+                    current[2] = uint8_t(current[2] + ((prior[2] + tempA[2]) >> 1));
+                    current[3] = uint8_t(current[3] + ((prior[3] + tempA[3]) >> 1));
+                    current[4] = uint8_t(current[4] + ((prior[4] + tempA[4]) >> 1));
+                    current[5] = uint8_t(current[5] + ((prior[5] + tempA[5]) >> 1));
+
+                    current += 6;
+                    prior += 6;
+                    tempA += 6;
+                }
+                break;
+            case 4: //Paeth
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + paethPredictor(tempA[0], prior[0], tempB[0]));
+                    current[1] = uint8_t(current[1] + paethPredictor(tempA[1], prior[1], tempB[1]));
+                    current[2] = uint8_t(current[2] + paethPredictor(tempA[2], prior[2], tempB[2]));
+                    current[3] = uint8_t(current[3] + paethPredictor(tempA[3], prior[3], tempB[3]));
+                    current[4] = uint8_t(current[4] + paethPredictor(tempA[4], prior[4], tempB[4]));
+                    current[5] = uint8_t(current[5] + paethPredictor(tempA[5], prior[5], tempB[5]));
+
+                    current += 6;
+                    prior += 6;
+                    tempA += 6;
+                    tempB += 6;
+                }
+                break;
+            }
+        }
+        static void reverseFilter_64(uint8_t* current, uint8_t* prior, int32_t width, uint8_t filter) {
+            uint8_t* tempA = current - 8;
+            uint8_t* tempB = prior - 8;
+            switch (filter)
+            {
+            case 1: //Sub
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + tempA[0]);
+                    current[1] = uint8_t(current[1] + tempA[1]);
+                    current[2] = uint8_t(current[2] + tempA[2]);
+                    current[3] = uint8_t(current[3] + tempA[3]);
+                    current[4] = uint8_t(current[4] + tempA[4]);
+                    current[5] = uint8_t(current[5] + tempA[5]);
+                    current[6] = uint8_t(current[6] + tempA[6]);
+                    current[7] = uint8_t(current[7] + tempA[7]);
+
+                    current += 8;
+                    tempA += 8;
+                }
+                break;
+            case 2: //Up
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + prior[0]);
+                    current[1] = uint8_t(current[1] + prior[1]);
+                    current[2] = uint8_t(current[2] + prior[2]);
+                    current[3] = uint8_t(current[3] + prior[3]);
+                    current[4] = uint8_t(current[4] + prior[4]);
+                    current[5] = uint8_t(current[5] + prior[5]);
+                    current[6] = uint8_t(current[6] + prior[6]);
+                    current[7] = uint8_t(current[7] + prior[7]);
+
+                    current += 8;
+                    prior += 8;
+                }
+                break;
+            case 3: //Average
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + ((prior[0] + tempA[0]) >> 1));
+                    current[1] = uint8_t(current[1] + ((prior[1] + tempA[1]) >> 1));
+                    current[2] = uint8_t(current[2] + ((prior[2] + tempA[2]) >> 1));
+                    current[3] = uint8_t(current[3] + ((prior[3] + tempA[3]) >> 1));
+                    current[4] = uint8_t(current[4] + ((prior[4] + tempA[4]) >> 1));
+                    current[5] = uint8_t(current[5] + ((prior[5] + tempA[5]) >> 1));
+                    current[6] = uint8_t(current[6] + ((prior[6] + tempA[6]) >> 1));
+                    current[7] = uint8_t(current[7] + ((prior[7] + tempA[7]) >> 1));
+
+                    current += 8;
+                    prior += 8;
+                    tempA += 8;
+                }
+                break;
+            case 4: //Paeth
+                for (int32_t x = 0; x < width; x++) {
+                    current[0] = uint8_t(current[0] + paethPredictor(tempA[0], prior[0], tempB[0]));
+                    current[1] = uint8_t(current[1] + paethPredictor(tempA[1], prior[1], tempB[1]));
+                    current[2] = uint8_t(current[2] + paethPredictor(tempA[2], prior[2], tempB[2]));
+                    current[3] = uint8_t(current[3] + paethPredictor(tempA[3], prior[3], tempB[3]));
+                    current[4] = uint8_t(current[4] + paethPredictor(tempA[4], prior[3], tempB[4]));
+                    current[5] = uint8_t(current[5] + paethPredictor(tempA[5], prior[3], tempB[5]));
+                    current[6] = uint8_t(current[6] + paethPredictor(tempA[6], prior[6], tempB[6]));
+                    current[7] = uint8_t(current[7] + paethPredictor(tempA[7], prior[7], tempB[7]));
+
+                    current += 8;
+                    prior += 8;
+                    tempA += 8;
+                    tempB += 8;
+                }
+                break;
+            }
+        }
+
         static void reverseFilter(Span<uint8_t>& current, Span<uint8_t>& prior, int32_t width, int32_t bpp, uint8_t filter) {
             width *= bpp;
             switch (filter)
@@ -523,14 +869,14 @@ namespace JCore {
                     break;
                 case 3: //Average
                     for (int32_t x = 0, xS = -bpp; x < width; x++, xS++) {
-                        current[x] = uint8_t(current[x] + ((prior[x] + (xS < 0 ? 0 : current[xS])) >> 1));
+                        current[x] = uint8_t(current[x] + ((prior[x] + current[xS]) >> 1));
                     }
                     break;
                 case 4: //Paeth
                     for (int32_t x = 0, xS = -bpp; x < width; x++, xS++) {
-                        int32_t a = (xS < 0 ? 0 : current[xS]);
+                        int32_t a = current[xS];
                         int32_t b = prior[x];
-                        int32_t c = (xS < 0 ? 0 : prior[xS]);
+                        int32_t c = prior[xS];
                         current[x] = uint8_t(current[x] + paethPredictor(a, b, c));
                     }
                     break;
@@ -702,7 +1048,8 @@ namespace JCore {
                 return false;
             }
 
-            uint8_t* scanBuffer = reinterpret_cast<uint8_t*>(_malloca(scanSP * 2));
+            size_t scanBuffered = size_t(scanSP) + bpp;
+            uint8_t* scanBuffer = reinterpret_cast<uint8_t*>(_malloca(scanBuffered * 2));
             if (!scanBuffer) {
                 JCORE_ERROR("[Image-IO] (PNG) Decode Error: Failed to allocate scan buffer!");
                 _freea(rawBuffer);
@@ -711,7 +1058,7 @@ namespace JCore {
                 imgData.data = nullptr;
                 return false;
             }
-            memset(scanBuffer, 0, scanSP * 2);
+            memset(scanBuffer, 0, scanBuffered * 2);
 
             if (imgData.format == TextureFormat::Indexed8) {
                 if (paletteChnk.type == CH_PLTE) {
@@ -739,8 +1086,28 @@ namespace JCore {
                 }
             }
 
-            Span<uint8_t> prior(scanBuffer, scanSP);
-            Span<uint8_t> current(scanBuffer + scanSP, scanSP);
+            ReverseFilter filter = reverseFilter_8;
+            switch (bpp)
+            {
+                case 2:
+                    filter = reverseFilter_16;
+                    break;
+                case 3:
+                    filter = reverseFilter_24;
+                    break;
+                case 4:
+                    filter = reverseFilter_32;
+                    break;
+                case 6:
+                    filter = reverseFilter_48;
+                    break;
+                case 8:
+                    filter = reverseFilter_64;
+                    break;
+            }
+
+            Span<uint8_t> prior(scanBuffer + bpp, scanSP);
+            Span<uint8_t> current(scanBuffer + scanBuffered + bpp, scanSP);
 
             Span<uint8_t> priorPix = prior.slice(1);
             Span<uint8_t> currentPix = current.slice(1);
@@ -755,8 +1122,10 @@ namespace JCore {
                 memcpy(current.get(), rawBuffer + xP, scanSP);
                 Data::reverseEndianess(currentPix.get(), bytesPC, channelsW);
 
-                reverseFilter(currentPix, priorPix, imgData.width, bpp, current[0]);
-
+                uint8_t mode = current[0];
+                current[0] = 0;
+                filter(currentPix.get(), priorPix.get(), imgData.width, mode);
+         
                 auto pixTgt = imgData.data + posR;
                 currentPix.copyTo(pixTgt);
                 posR += scanSR;

@@ -1,7 +1,7 @@
 #include <J-Core/IO/ImageUtils.h>
 #include <J-Core/Log.h>
 #include <J-Core/Math/Math.h>
-#include <J-Core/ThreadManager.h>
+#include <J-Core/TaskManager.h>
 #include <unordered_set>
 #include <glm.hpp>
 #include <stack>
